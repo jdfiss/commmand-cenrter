@@ -1,0 +1,1931 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Center</title>
+    <link rel="icon" href="/static/favicon.ico">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#f5f0eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="指揮中心">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+        body { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+        .swipe-content { touch-action: pan-y; }
+        .cal-cell { border-right: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; }
+        #cal-grid { border-left: 1px solid #f3f4f6; border-top: 1px solid #f3f4f6; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans antialiased">
+
+<!-- ═══ Sticky Header ═══ -->
+<header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
+        <!-- User switcher -->
+        <button onclick="openUserPicker()" class="flex items-center gap-2 rounded-xl hover:bg-gray-100 px-2 py-1.5 transition shrink-0 active:scale-95">
+            <span class="text-xl leading-none">{{ current_user.avatar }}</span>
+            <span class="text-sm font-semibold text-gray-800 hidden sm:block">{{ current_user.name }}</span>
+            <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+
+        <!-- Spacer -->
+        <div class="flex-1 min-w-0"></div>
+
+        <!-- Pressure indicator -->
+        <div class="relative group cursor-default flex items-center gap-2 shrink-0">
+            <span class="relative flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60
+                    {% if pressure >= 4.0 %}bg-red-500{% elif pressure >= 2.0 %}bg-amber-400{% else %}bg-emerald-400{% endif %}"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5
+                    {% if pressure >= 4.0 %}bg-red-500{% elif pressure >= 2.0 %}bg-amber-400{% else %}bg-emerald-400{% endif %}"></span>
+            </span>
+            <span class="text-xs font-mono text-gray-400 hidden sm:block">{{ "%.1f"|format(pressure) }}h/d</span>
+            <div class="absolute right-0 top-7 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-xl z-50 pointer-events-none">
+                {{ status_msg }}<br>{{ "%.1f"|format(pressure) }} h/d
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+
+    <!-- ═══ Quick Input ═══ -->
+    <div class="flex gap-2">
+        <input id="inbox-input" type="text" placeholder="隨手記，Enter 加入待辦清單…"
+            onkeydown="if(event.key==='Enter')addToInbox()"
+            class="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-gray-400 transition placeholder:text-gray-400 shadow-sm"/>
+        <button onclick="addToInbox()" class="px-4 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition active:scale-95 shadow-sm shrink-0">加入</button>
+    </div>
+
+    <!-- Inbox list -->
+    <ul id="inbox-list" class="space-y-1.5">
+        {% for item in data.inbox %}
+        <li class="inbox-item rounded-xl overflow-hidden" data-item="{{ item }}">
+            <div class="swipe-content flex items-center gap-3 bg-white border border-gray-200 px-4 py-4 text-sm text-gray-700 shadow-sm min-h-[56px]">
+                <span class="w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
+                <span class="flex-1 leading-snug text-base">{{ item }}</span>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <!-- Section dock -->
+    <div id="section-dock" style="display:none" class="flex flex-wrap gap-1.5"></div>
+
+    <!-- ═══ Mood Row ═══ -->
+    <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm">
+        <span class="text-[11px] text-gray-400 shrink-0 font-medium">今日心情</span>
+        <div class="flex gap-1" id="mood-btns">
+            {% set moods = [('😴','tired'),('😟','stressed'),('😐','neutral'),('😊','good'),('🔥','crush')] %}
+            {% for emoji, key in moods %}
+            <button onclick="saveMood('{{ emoji }}')"
+                class="text-base w-8 h-8 rounded-full hover:bg-gray-100 transition active:scale-90
+                {% if mood_today.emoji == emoji %}ring-2 ring-gray-400 bg-gray-100{% endif %}">{{ emoji }}</button>
+            {% endfor %}
+        </div>
+        <input id="mood-note" type="text" placeholder="一句話記錄今天…" value="{{ mood_today.note }}"
+            onblur="saveMoodNote()"
+            class="flex-1 text-xs text-gray-700 bg-transparent outline-none placeholder:text-gray-300 min-w-0"/>
+        {% if pomodoro_today > 0 %}
+        <span class="text-[11px] text-gray-400 shrink-0">🍅×{{ pomodoro_today }}</span>
+        {% else %}
+        <span id="pomo-badge" class="text-[11px] text-gray-400 shrink-0 hidden">🍅×<span id="pomo-count">0</span></span>
+        {% endif %}
+    </div>
+
+    <!-- ═══ Main Grid ═══ -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+        <!-- ── Left: Today + Deadlines ── -->
+        <main class="lg:col-span-3 space-y-4">
+
+            <!-- Today's Tasks -->
+            <div id="section-today" class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                    <div>
+                        <h2 onclick="toggleSection('section-today')" class="text-base font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">今日事項</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">{{ current_date }} · 星期{{ today_dow }}</p>
+                    </div>
+                    {% set ns = namespace(done=0) %}
+                    {% for t in today_schedule %}{% if t.completed %}{% set ns.done = ns.done + 1 %}{% endif %}{% endfor %}
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-mono text-gray-400">{{ ns.done }}/{{ today_schedule|length }}</span>
+                        <div class="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            {% if today_schedule|length > 0 %}
+                            <div class="h-full bg-gray-900 rounded-full transition-all" style="width:{{ (ns.done / today_schedule|length * 100)|round }}%"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if today_schedule %}
+                <div class="divide-y divide-gray-50">
+                    {% for task in today_schedule %}
+                    {% set is_past = task.time < current_time and not task.completed %}
+                    <div data-swipe-task data-date="{{ current_date }}" data-idx="{{ loop.index0 }}" class="overflow-hidden">
+                    <div class="swipe-content flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 transition group"
+                         onclick="toggleTask('{{ current_date }}', {{ loop.index0 }})">
+                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition
+                            {% if task.completed %}bg-emerald-500 border-emerald-500
+                            {% elif is_past %}border-orange-400
+                            {% else %}border-gray-300 group-hover:border-gray-400{% endif %}">
+                            {% if task.completed %}
+                            <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <span class="text-sm {% if task.completed %}line-through text-gray-400{% elif is_past %}text-orange-600 font-medium{% else %}text-gray-800{% endif %}">{{ task.task }}</span>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            {% if is_past and not task.completed %}<span class="text-[10px] text-orange-400 font-semibold">遲了</span>{% endif %}
+                            <span class="text-xs font-mono text-gray-400">{{ task.time }}</span>
+                            <span class="text-[10px] text-gray-300">{{ task.duration }}m</span>
+                            <button onclick="event.stopPropagation(); moveTask('{{ current_date }}', {{ loop.index0 }}, 'up')"
+                                class="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-gray-300 hover:text-gray-600 transition rounded hover:bg-gray-100 text-[10px]">↑</button>
+                            <button onclick="event.stopPropagation(); moveTask('{{ current_date }}', {{ loop.index0 }}, 'down')"
+                                class="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-gray-300 hover:text-gray-600 transition rounded hover:bg-gray-100 text-[10px]">↓</button>
+                            <button onclick="event.stopPropagation(); startFocusTimer('{{ task.task }}')"
+                                class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-700 transition rounded-md hover:bg-gray-100">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="1.5"/><polyline points="12 6 12 12 16 14" stroke-width="1.5"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="flex flex-col items-center py-10 text-gray-400">
+                    <svg class="w-8 h-8 mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <p class="text-sm">今日無排程</p>
+                    <p class="text-xs mt-1 text-gray-300">在下方行事曆點日期新增</p>
+                </div>
+                {% endif %}
+
+                {% if fixed_today %}
+                <div class="border-t border-gray-100 px-5 py-3">
+                    <button id="fixed-btn" onclick="toggleFixedPanel()"
+                        class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <span id="fixed-btn-label">固定課表 ({{ fixed_today|length }})</span>
+                    </button>
+                    <div id="fixed-panel" class="hidden mt-2 space-y-1">
+                        {% for ft in fixed_today %}
+                        <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-xs">
+                            <span class="font-mono text-gray-400 shrink-0">{{ ft.time }}</span>
+                            <span class="flex-1 text-gray-600">{{ ft.task }}</span>
+                            <span class="text-gray-300">{{ ft.duration }}m</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Today Suggestion -->
+            {% if study_worst %}
+            {% set sw = study_plan[study_worst] %}
+            <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 flex items-center gap-3 border-l-4 border-l-violet-400">
+                <span class="text-base shrink-0">💡</span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold text-violet-700">今日建議優先讀</p>
+                    <p class="text-sm font-bold text-gray-900 truncate">{{ study_worst }}</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5">剩 {{ sw.total - sw.finished }} 章 · 已完成 {{ sw.pct }}%</p>
+                </div>
+                <button onclick="openSubjectModal('{{ study_worst }}')"
+                    class="text-xs text-violet-600 hover:text-violet-800 border border-violet-200 hover:border-violet-400 px-2.5 py-1.5 rounded-lg transition active:scale-95 shrink-0">排入</button>
+            </div>
+            {% endif %}
+
+            <!-- Deadline warnings (urgent only ≤7d) -->
+            {% for dl in deadlines %}
+            {% if dl.days_left <= 7 %}
+            <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 flex items-center gap-3
+                border-l-4 {% if dl.days_left <= 3 %}border-l-red-500{% else %}border-l-amber-400{% endif %}">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium {% if dl.days_left <= 3 %}text-red-700{% else %}text-amber-700{% endif %}">{{ dl.name }}</p>
+                    {% if dl.note %}<p class="text-xs text-gray-500 mt-0.5">{{ dl.note }}</p>{% endif %}
+                </div>
+                <span class="text-xs font-mono font-bold shrink-0 {% if dl.days_left <= 3 %}text-red-500{% else %}text-amber-500{% endif %}">
+                    {% if dl.days_left == 0 %}今天{% elif dl.days_left < 0 %}OVERDUE{% else %}{{ dl.days_left }}d{% endif %}
+                </span>
+            </div>
+            {% endif %}
+            {% endfor %}
+
+        </main>
+
+        <!-- ── Right Sidebar ── -->
+        <aside class="lg:col-span-2 space-y-4">
+
+            <!-- Long-term goals -->
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                <h2 class="text-sm font-bold text-gray-900 mb-4">長期目標</h2>
+                <div class="space-y-4">
+                    {% for key, ml in milestones.items() %}
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-sm font-medium text-gray-800">{{ ml.name }}</span>
+                            <div class="flex items-center gap-2">
+                                <button onclick="openEditMilestone('{{ key }}')"
+                                    class="text-[10px] text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-1.5 py-0.5 rounded transition active:scale-95">編輯</button>
+                                <span class="text-xs font-mono {% if ml.days_left <= 90 %}text-red-500{% elif ml.days_left <= 180 %}text-amber-500{% else %}text-gray-400{% endif %}">{{ ml.days_left }}d</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-gray-100 rounded-full h-1.5 mb-1">
+                            <div class="h-1.5 rounded-full bg-gray-900 transition-all duration-700" style="width:{{ ml.pct }}%"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] text-gray-400">
+                            <span>{{ ml.finished_chapters }}/{{ ml.total_chapters }} 章 · {{ ml.pct }}%</span>
+                            <span>{{ ml.deadline }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Hard Deadlines (all) -->
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                <h2 class="text-sm font-bold text-gray-900 mb-3">截止日</h2>
+                <div class="space-y-2">
+                    {% for dl in deadlines %}
+                    <div data-swipe-deadline data-idx="{{ loop.index0 }}" class="rounded-lg overflow-hidden">
+                    <div class="swipe-content flex items-center gap-3 py-2">
+                        <span class="w-1.5 h-1.5 rounded-full shrink-0
+                            {% if dl.days_left <= 3 %}bg-red-500{% elif dl.days_left <= 7 %}bg-amber-400{% else %}bg-gray-300{% endif %}"></span>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm text-gray-800 leading-tight truncate">{{ dl.name }}</p>
+                            {% if dl.note %}<p class="text-[10px] text-gray-400 mt-0.5 truncate">{{ dl.note }}</p>{% endif %}
+                        </div>
+                        <span class="text-xs font-mono shrink-0 {% if dl.days_left <= 3 %}text-red-500 font-bold{% elif dl.days_left <= 7 %}text-amber-500{% else %}text-gray-400{% endif %}">
+                            {% if dl.days_left < 0 %}OVER{% elif dl.days_left == 0 %}今天{% else %}{{ dl.days_left }}d{% endif %}
+                        </span>
+                    </div>
+                    </div>
+                    {% else %}
+                    <p class="text-xs text-gray-400 text-center py-2">沒有截止日</p>
+                    {% endfor %}
+                </div>
+                <!-- Quick add deadline -->
+                <div class="flex gap-1.5 mt-3 pt-3 border-t border-gray-100">
+                    <input id="dl-quick-name" type="text" placeholder="新截止日名稱…"
+                        onkeydown="if(event.key==='Enter')quickAddDeadline()"
+                        class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:border-gray-400 transition placeholder:text-gray-300 min-w-0"/>
+                    <input id="dl-quick-date" type="date"
+                        class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                    <button onclick="quickAddDeadline()"
+                        class="px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg font-semibold transition active:scale-95 shrink-0">＋</button>
+                </div>
+            </div>
+
+            <!-- Time debt -->
+            {% set has_debt = namespace(v=false) %}
+            {% for task, debt in data.time_debt.items() %}{% if debt > 0 %}{% set has_debt.v = true %}{% endif %}{% endfor %}
+            {% if has_debt.v %}
+            <div id="section-debt" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 onclick="toggleSection('section-debt')" class="text-sm font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">時間債務</h2>
+                    <span class="text-lg font-bold font-mono {% if total_debt > 15 %}text-red-500{% elif total_debt > 5 %}text-amber-500{% else %}text-gray-700{% endif %}">{{ "%.1f"|format(total_debt) }}h</span>
+                </div>
+                <div class="space-y-1">
+                    {% for task, debt in data.time_debt.items() %}
+                    {% if debt > 0 %}
+                    <div data-swipe-debt data-key="{{ task }}" class="rounded-lg overflow-hidden">
+                    <div class="swipe-content flex justify-between items-center py-1.5 text-sm">
+                        <span class="text-gray-600 truncate">{{ task }}</span>
+                        <span class="text-xs font-mono text-gray-400 shrink-0 ml-2">{{ debt }}h</span>
+                    </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Habit tracking -->
+            <div id="section-habits" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 onclick="toggleSection('section-habits')" class="text-sm font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">習慣追蹤</h2>
+                    <span class="text-xs font-mono text-gray-400" id="habit-count">{{ habit_today|length }}/{{ habit_defs|length }}</span>
+                </div>
+                <div class="space-y-1" id="habit-grid">
+                    {% for habit in habit_defs %}
+                    {% set done = habit in habit_today %}
+                    <button id="habit-{{ loop.index0 }}" onclick="toggleHabit('{{ habit }}', {{ loop.index0 }})"
+                        class="w-full flex items-center gap-3 py-2 rounded-lg transition active:scale-[0.99] text-left hover:bg-gray-50 px-2">
+                        <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition
+                            {% if done %}bg-gray-900 border-gray-900{% else %}border-gray-300{% endif %}">
+                            {% if done %}<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>{% endif %}
+                        </div>
+                        <span class="text-sm flex-1 {% if done %}line-through text-gray-400{% else %}text-gray-700{% endif %}">{{ habit }}</span>
+                        {% if habit_streaks[habit] > 0 %}<span class="text-xs text-orange-500 shrink-0">🔥{{ habit_streaks[habit] }}</span>{% endif %}
+                    </button>
+                    {% endfor %}
+                </div>
+                <!-- 本週熱力列 -->
+                <div class="mt-3 pt-3 border-t border-gray-100">
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">本週習慣</p>
+                    <div id="habit-heatmap" class="flex gap-1"></div>
+                </div>
+            </div>
+
+            <!-- Water / Sleep -->
+            <div id="section-health" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                <h2 onclick="toggleSection('section-health')" class="text-sm font-bold text-gray-900 mb-4 cursor-pointer hover:text-gray-500 transition select-none">今日記錄</h2>
+                <div class="flex gap-3">
+                    <div class="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <p class="text-[10px] text-gray-400 mb-2 font-medium">💧 水分</p>
+                        <div class="flex items-center justify-between">
+                            <button onclick="adjustHealth('water', -1)" class="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-500 text-base font-bold hover:bg-gray-100 transition active:scale-90 flex items-center justify-center">−</button>
+                            <div class="text-center">
+                                <span id="water-val" class="text-xl font-bold font-mono text-gray-800">{{ health_today.water|int }}</span>
+                                <span class="text-xs text-gray-400"> 杯</span>
+                            </div>
+                            <button onclick="adjustHealth('water', 1)" class="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-500 text-base font-bold hover:bg-gray-100 transition active:scale-90 flex items-center justify-center">＋</button>
+                        </div>
+                        <div class="flex gap-0.5 mt-2 justify-center">
+                            {% for i in range(8) %}<div class="w-3 h-3 rounded-sm {% if i < health_today.water|int %}bg-blue-400{% else %}bg-gray-100{% endif %}"></div>{% endfor %}
+                        </div>
+                    </div>
+                    <div class="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <p class="text-[10px] text-gray-400 mb-2 font-medium">😴 睡眠</p>
+                        <div class="flex items-center justify-between">
+                            <button onclick="adjustHealth('sleep', -0.5)" class="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-500 text-base font-bold hover:bg-gray-100 transition active:scale-90 flex items-center justify-center">−</button>
+                            <div class="text-center">
+                                <span id="sleep-val" class="text-xl font-bold font-mono text-gray-800">{{ health_today.sleep }}</span>
+                                <span class="text-xs text-gray-400"> h</span>
+                            </div>
+                            <button onclick="adjustHealth('sleep', 0.5)" class="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-500 text-base font-bold hover:bg-gray-100 transition active:scale-90 flex items-center justify-center">＋</button>
+                        </div>
+                        <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div id="sleep-bar" class="h-full rounded-full transition-all"
+                                style="width:{{ [health_today.sleep / 9 * 100, 100]|min }}%;
+                                background:{% if health_today.sleep < 6 %}#f87171{% elif health_today.sleep < 7 %}#fbbf24{% else %}#34d399{% endif %}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+    </div><!-- end main grid -->
+
+    <!-- ═══ Study Plan ═══ -->
+    <div id="section-study" class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h2 onclick="toggleSection('section-study')" class="text-base font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">讀書計畫</h2>
+            <button onclick="toggleAddSubject()" class="text-xs font-medium text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">＋ 新增科目</button>
+        </div>
+        <div id="add-subject-form" class="hidden px-5 py-4 bg-gray-50 border-b border-gray-100">
+            <div class="flex gap-2">
+                <input id="new-subject-name" type="text" placeholder="科目名稱"
+                    class="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                <input id="new-subject-total" type="number" placeholder="章數" value="10" min="1"
+                    class="w-20 bg-white border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                <button onclick="addSubject()" class="px-3 py-2 bg-gray-900 text-white text-sm rounded-lg font-semibold transition active:scale-95">新增</button>
+            </div>
+        </div>
+        <div class="divide-y divide-gray-50">
+            {% for subject, prog in study_plan.items() %}
+            <div data-swipe-study data-subject="{{ subject }}" class="overflow-hidden">
+            <div class="swipe-content px-5 py-4 hover:bg-gray-50 transition">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="openSubjectModal('{{ subject }}')" class="text-sm font-semibold text-gray-900 hover:text-gray-500 transition text-left">{{ subject }}</button>
+                        {% if subject == study_worst %}<span class="text-xs bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded font-semibold">🔥 優先</span>{% endif %}
+                        <button onclick="toggleStudyNote('{{ subject }}')"
+                            class="text-[10px] text-gray-400 hover:text-violet-600 border border-gray-200 hover:border-violet-300 px-1.5 py-0.5 rounded transition"
+                            title="備註細項">備註</button>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="updateChapter('{{ subject }}', -1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-500 text-xs font-bold transition active:scale-90">−</button>
+                        <span class="text-xs font-mono text-gray-700 w-14 text-center bg-gray-100 rounded px-1.5 py-0.5">{{ prog.finished }}/{{ prog.total }}</span>
+                        <button onclick="updateChapter('{{ subject }}', 1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-emerald-100 hover:text-emerald-600 text-gray-500 text-xs font-bold transition active:scale-90">＋</button>
+                    </div>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full bg-gray-900 transition-all duration-700" style="width:{{ prog.pct }}%"></div>
+                </div>
+                <div class="flex justify-between mt-1.5 text-[10px] text-gray-400">
+                    <span>{{ prog.pct }}% 完成 · 剩 {{ prog.total - prog.finished }} 章</span>
+                    <span>{{ prog.est_finish }}</span>
+                </div>
+                <!-- 備註細項 (hidden by default) -->
+                <div class="hidden mt-3 pt-3 border-t border-gray-100" data-study-note="{{ loop.index0 }}">
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">細項備註</p>
+                    <textarea data-subject="{{ subject }}" onblur="saveInlineStudyNote(this)"
+                        class="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:border-violet-300 resize-none h-16 placeholder:text-gray-300"
+                        placeholder="考試範圍、重點提示、讀書節奏…">{{ prog.notes or '' }}</textarea>
+                </div>
+            </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex gap-5">
+            {% set ns = namespace(rem=0, done=0, total=0) %}
+            {% for subject, prog in study_plan.items() %}
+                {% set ns.rem   = ns.rem   + (prog.total - prog.finished) * 3 %}
+                {% set ns.done  = ns.done  + prog.finished %}
+                {% set ns.total = ns.total + prog.total %}
+            {% endfor %}
+            <span class="text-xs text-gray-500">整體 <span class="font-mono font-semibold text-gray-800">{{ ns.done }}/{{ ns.total }}</span> 章</span>
+            <span class="text-xs text-gray-500">剩餘估時 <span class="font-mono font-semibold text-gray-800">≈{{ ns.rem }}h</span></span>
+        </div>
+    </div>
+
+    <!-- ═══ Weekly Report ═══ -->
+    <div id="section-weekly" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+        <h2 onclick="toggleSection('section-weekly')" class="text-base font-bold text-gray-900 mb-4 cursor-pointer hover:text-gray-500 transition select-none">本週週報</h2>
+        <div class="grid grid-cols-7 gap-1.5" id="week-report-grid">
+            {% for ws in week_stats %}
+            {% set task_pct = (ws.task_done / ws.task_total * 100)|round|int if ws.task_total > 0 else 0 %}
+            {% set habit_pct = (ws.habit_done / ws.habit_total * 100)|round|int if ws.habit_total > 0 else 0 %}
+            {% set d = ws.date %}
+            <div class="flex flex-col items-center gap-1">
+                <span class="text-[9px] text-gray-400 font-medium">{{ d[8:] }}</span>
+                <!-- task bar -->
+                <div class="w-full h-16 bg-gray-50 rounded-lg border border-gray-100 flex flex-col justify-end overflow-hidden relative">
+                    <div class="w-full transition-all duration-700 {% if task_pct == 100 %}bg-emerald-400{% elif task_pct > 0 %}bg-blue-300{% else %}bg-transparent{% endif %}"
+                        style="height:{{ task_pct }}%"></div>
+                    {% if ws.pomo > 0 %}
+                    <span class="absolute top-1 left-0 right-0 text-center text-[9px] text-orange-500">🍅{{ ws.pomo }}</span>
+                    {% endif %}
+                </div>
+                <!-- habit dots -->
+                <div class="flex gap-0.5">
+                    {% for i in range(ws.habit_total) %}
+                    <div class="w-1.5 h-1.5 rounded-full {% if i < ws.habit_done %}bg-gray-700{% else %}bg-gray-100{% endif %}"></div>
+                    {% endfor %}
+                </div>
+                <span class="text-[9px] font-mono text-gray-400">
+                    {% if ws.task_total > 0 %}{{ ws.task_done }}/{{ ws.task_total }}{% else %}—{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-xs text-gray-400">
+            {% set total_tasks = week_stats | sum(attribute='task_total') %}
+            {% set done_tasks  = week_stats | sum(attribute='task_done') %}
+            {% set total_pomo  = week_stats | sum(attribute='pomo') %}
+            <span>任務完成率 <strong class="text-gray-700 font-mono">{% if total_tasks > 0 %}{{ (done_tasks/total_tasks*100)|round|int }}%{% else %}—{% endif %}</strong></span>
+            <span>番茄鐘 <strong class="text-gray-700 font-mono">{{ total_pomo }} 🍅</strong></span>
+        </div>
+    </div>
+
+    <!-- ═══ Calendar ═══ -->
+    <div id="section-calendar" class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <!-- Calendar header -->
+        <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+                <span onclick="toggleSection('section-calendar')" class="text-base font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">行事曆</span>
+                <div class="flex items-center gap-1">
+                <button onclick="prevMonth()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition active:scale-90">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <span id="cal-month-label" class="text-base font-bold text-gray-900 w-32 text-center select-none"></span>
+                <button onclick="nextMonth()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition active:scale-90">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                </button>
+                </div>
+            </div>
+            <!-- Weekly mini strip -->
+            <div id="weekly-strip" class="hidden sm:flex items-center gap-0.5"></div>
+            <button onclick="goToday()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">今天</button>
+        </div>
+
+        <!-- Mobile backdrop -->
+        <div id="cal-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm" onclick="closeDayPanel()"></div>
+
+        <div class="flex">
+            <!-- Calendar grid -->
+            <div class="flex-1 p-3 sm:p-4">
+                <div class="grid grid-cols-7 mb-1">
+                    <div class="text-center text-xs font-semibold text-red-400 py-1">日</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">一</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">二</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">三</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">四</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">五</div>
+                    <div class="text-center text-xs font-semibold text-sky-400 py-1">六</div>
+                </div>
+                <div id="cal-grid" class="grid grid-cols-7"></div>
+            </div>
+
+            <!-- Day detail panel -->
+            <div id="day-panel" class="hidden">
+                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-white">
+                    <div>
+                        <h3 id="panel-date" class="font-bold text-gray-900 text-base leading-tight"></h3>
+                        <p id="panel-date-sub" class="text-xs text-gray-400 mt-0.5"></p>
+                    </div>
+                    <button onclick="closeDayPanel()" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div id="panel-tasks" class="flex-1 overflow-y-auto px-3 py-3 bg-white"></div>
+                <div class="px-3 py-3 border-t border-gray-100 bg-gray-50">
+                    <input id="new-task-name" type="text" placeholder="＋ 新增任務…"
+                        class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2 transition placeholder:text-gray-400"/>
+                    <!-- 全天 toggle -->
+                    <label class="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                        <input type="checkbox" id="task-all-day" onchange="toggleAllDayInput()" class="rounded accent-gray-900"/>
+                        <span class="text-xs text-gray-600 font-medium">全天</span>
+                    </label>
+                    <!-- 時間欄位 (隱藏時為全天) -->
+                    <div id="task-time-row" class="flex gap-2 mb-2 items-center">
+                        <input id="new-task-time" type="time" value="09:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                        <span class="text-xs text-gray-400 shrink-0">到</span>
+                        <input id="new-task-end-time" type="time" value="10:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                    </div>
+                    <div id="task-color-picker" class="flex gap-2 mb-2 flex-wrap"></div>
+                    <button onclick="addTaskFromCal()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition active:scale-95">加入排程</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- end max-w container -->
+
+<!-- ═══ User Picker ═══ -->
+<div id="user-picker" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="closeUserPicker(event)">
+    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm shadow-2xl p-5" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-gray-900">切換使用者</h3>
+            <button onclick="closeUserPicker()" class="text-gray-400 hover:text-gray-700 transition w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <div id="user-list" class="space-y-2 mb-4">
+            {% for u in users %}
+            <button onclick="switchUser('{{ u.id }}')"
+                class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition active:scale-[0.98]
+                {% if u.id == current_user.id %}bg-gray-900 border-gray-900 text-white{% else %}bg-white border-gray-200 text-gray-700 hover:bg-gray-50{% endif %}">
+                <span class="text-2xl leading-none">{{ u.avatar }}</span>
+                <span class="text-sm font-semibold flex-1 text-left">{{ u.name }}</span>
+                {% if u.id == current_user.id %}<span class="text-xs opacity-60">目前</span>{% endif %}
+                {% if u.id != 'default' %}
+                <button onclick="event.stopPropagation(); deleteUser('{{ u.id }}', '{{ u.name }}')"
+                    class="{% if u.id == current_user.id %}text-white/40 hover:text-white{% else %}text-gray-300 hover:text-red-400{% endif %} transition text-xs px-1">✕</button>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+        <div id="add-user-form" class="hidden space-y-2 mb-3">
+            <div class="flex gap-2">
+                <input id="new-user-avatar" type="text" maxlength="2" value="😊" placeholder="頭像"
+                    class="w-14 border border-gray-200 rounded-xl px-2 py-2 text-center text-lg focus:outline-none focus:border-gray-400"/>
+                <input id="new-user-name" type="text" placeholder="名稱"
+                    class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+                <button onclick="createUser()" class="px-3 py-2 bg-gray-900 text-white rounded-xl text-sm font-bold transition active:scale-95">✓</button>
+            </div>
+        </div>
+        <button onclick="document.getElementById('add-user-form').classList.toggle('hidden'); document.getElementById('new-user-name').focus()"
+            class="w-full py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 text-sm border border-gray-200 transition">
+            ＋ 新增使用者
+        </button>
+    </div>
+</div>
+
+<!-- ═══ Subject Modal ═══ -->
+<div id="subject-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-6" onclick="closeSubjectModal(event)">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl border border-gray-200 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+                <h2 id="modal-title" class="text-xl font-bold text-gray-900"></h2>
+                <p id="modal-subtitle" class="text-sm text-gray-400 mt-0.5"></p>
+            </div>
+            <button onclick="closeSubjectModal()" class="text-gray-400 hover:text-gray-700 text-xl transition w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <div class="px-6 pt-5 pb-3">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">章節進度</p>
+            <div id="modal-chapters" class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto"></div>
+        </div>
+        <div class="px-6 pb-4 pt-3 border-t border-gray-100">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">排入行事曆</p>
+                <div class="flex items-center gap-1.5">
+                    <button id="study-mode-single" onclick="setStudyMode('single')"
+                        class="text-xs px-2.5 py-1 rounded-lg border border-gray-900 bg-gray-900 text-white font-medium transition">單日</button>
+                    <button id="study-mode-multi" onclick="setStudyMode('multi')"
+                        class="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 font-medium transition">跨日</button>
+                </div>
+            </div>
+            <div id="study-date-single" class="grid grid-cols-2 gap-2 mb-2">
+                <input id="study-date" type="date" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                <input id="study-time" type="time" value="09:00" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+            </div>
+            <div id="study-date-multi" class="hidden mb-2" style="display:none;grid-template-columns:1fr 1fr;gap:0.5rem">
+                <div>
+                    <p class="text-[10px] text-gray-400 mb-1">開始日</p>
+                    <input id="study-date-from" type="date" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-400 mb-1">結束日</p>
+                    <input id="study-date-to" type="date" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <input id="study-chapter" type="text" placeholder="章節（例如 Ch4）" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                <input id="study-dur" type="number" value="120" min="30" step="30" placeholder="分鐘" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+            </div>
+            <button onclick="scheduleStudy()" class="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg font-medium text-sm transition active:scale-95">＋ 加入行事曆</button>
+        </div>
+        <div id="modal-stats" class="px-6 pt-3 flex gap-3"></div>
+        <div class="px-6 pb-5 pt-3 border-t border-gray-100">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">備註</p>
+            <textarea id="modal-notes" onblur="saveStudyNotes()"
+                class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-gray-400 transition resize-none h-20 placeholder:text-gray-400"
+                placeholder="考試範圍、重點提示…"></textarea>
+            <div id="notes-save-status" class="text-right text-[10px] text-gray-400 mt-1">失焦自動存</div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Edit Task Modal ═══ -->
+<div id="edit-task-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-gray-900">編輯任務</h3>
+            <button onclick="document.getElementById('edit-task-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <input id="edit-task-name" type="text" placeholder="任務名稱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
+        <div class="flex gap-2 mb-4">
+            <input id="edit-task-time" type="time" class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+            <input id="edit-task-dur" type="number" min="5" placeholder="分鐘" class="w-24 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+        </div>
+        <button onclick="saveEditTask()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-semibold transition active:scale-95">儲存</button>
+    </div>
+</div>
+
+<!-- ═══ Edit Deadline Modal ═══ -->
+<div id="edit-deadline-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-gray-900">編輯截止日</h3>
+            <button onclick="document.getElementById('edit-deadline-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <input id="edit-dl-name" type="text" placeholder="名稱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
+        <input id="edit-dl-date" type="date" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
+        <input id="edit-dl-note" type="text" placeholder="備註" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-4"/>
+        <button onclick="saveEditDeadline()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-semibold transition active:scale-95">儲存</button>
+    </div>
+</div>
+
+<!-- ═══ Edit Milestone Modal ═══ -->
+<div id="edit-milestone-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 shadow-2xl" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-gray-900">編輯長期目標</h3>
+            <button onclick="document.getElementById('edit-milestone-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <input id="edit-ml-name" type="text" placeholder="目標名稱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
+        <div class="flex gap-2 mb-2">
+            <div class="flex-1">
+                <p class="text-[10px] text-gray-400 mb-1">截止日</p>
+                <input id="edit-ml-deadline" type="date" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+            </div>
+            <div class="w-24">
+                <p class="text-[10px] text-gray-400 mb-1">已讀章數</p>
+                <input id="edit-ml-finished" type="number" min="0" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+            </div>
+        </div>
+        <div class="flex gap-2 mb-4">
+            <div class="flex-1">
+                <p class="text-[10px] text-gray-400 mb-1">總章數</p>
+                <input id="edit-ml-total" type="number" min="1" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+            </div>
+            <div class="w-24">
+                <p class="text-[10px] text-gray-400 mb-1">小時/章</p>
+                <input id="edit-ml-hpc" type="number" min="0.5" step="0.5" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
+            </div>
+        </div>
+        <button onclick="saveEditMilestone()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-semibold transition active:scale-95">儲存</button>
+    </div>
+</div>
+
+<!-- ═══ Inbox Detail Modal ═══ -->
+<div id="inbox-detail-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeInboxDetail()">
+    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h3 class="text-base font-bold text-gray-900">隨手記詳情</h3>
+            <button onclick="closeInboxDetail()" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <div class="px-5 py-4">
+            <p id="inbox-detail-text" class="text-sm text-gray-800 font-medium bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-200 leading-relaxed"></p>
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">歸類到…</p>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button onclick="inboxToSchedule()" class="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition active:scale-95">
+                    <span class="text-xl">📅</span>
+                    <span class="text-xs font-medium text-gray-700">今日任務</span>
+                </button>
+                <button onclick="inboxToStudy()" class="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-gray-200 hover:border-violet-300 hover:bg-violet-50 transition active:scale-95">
+                    <span class="text-xl">📖</span>
+                    <span class="text-xs font-medium text-gray-700">讀書計畫</span>
+                </button>
+                <button onclick="inboxToDeadline()" class="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-gray-200 hover:border-red-300 hover:bg-red-50 transition active:scale-95">
+                    <span class="text-xl">⚑</span>
+                    <span class="text-xs font-medium text-gray-700">截止日</span>
+                </button>
+                <button onclick="inboxToDebt()" class="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-gray-200 hover:border-amber-300 hover:bg-amber-50 transition active:scale-95">
+                    <span class="text-xl">⏳</span>
+                    <span class="text-xs font-medium text-gray-700">時間債</span>
+                </button>
+            </div>
+            <!-- Sub-forms (shown conditionally) -->
+            <div id="inbox-sub-schedule" class="hidden bg-gray-50 rounded-xl p-3 mb-3 border border-gray-100">
+                <p class="text-xs font-semibold text-gray-500 mb-2">加入今日排程</p>
+                <div class="flex gap-2 mb-2">
+                    <input id="inbox-sched-date" type="date" class="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-gray-400"/>
+                    <input id="inbox-sched-time" type="time" value="09:00" class="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-gray-400"/>
+                </div>
+                <button onclick="confirmInboxSchedule()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-lg font-semibold transition">確認加入</button>
+            </div>
+            <div id="inbox-sub-deadline" class="hidden bg-gray-50 rounded-xl p-3 mb-3 border border-gray-100">
+                <p class="text-xs font-semibold text-gray-500 mb-2">設定截止日</p>
+                <input id="inbox-dl-date" type="date" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
+                <input id="inbox-dl-note" type="text" placeholder="備註（選填）" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
+                <button onclick="confirmInboxDeadline()" class="w-full py-2 bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg font-semibold transition">確認加入</button>
+            </div>
+            <div id="inbox-sub-debt" class="hidden bg-gray-50 rounded-xl p-3 mb-3 border border-gray-100">
+                <p class="text-xs font-semibold text-gray-500 mb-2">估算時數</p>
+                <div class="flex gap-2">
+                    <input id="inbox-debt-hours" type="number" min="0.5" step="0.5" value="1" placeholder="小時" class="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-800 focus:outline-none focus:border-gray-400"/>
+                    <button onclick="confirmInboxDebt()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs rounded-lg font-semibold transition">確認</button>
+                </div>
+            </div>
+            <button onclick="confirmInboxDelete()" class="w-full py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium transition">刪除此事項</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Focus Timer: collapsed bubble + expanded panel ═══ -->
+<div id="focus-timer-btn" class="hidden fixed bottom-6 right-5 sm:right-7 z-50">
+    <button onclick="expandTimer()"
+        class="w-14 h-14 bg-gray-900 hover:bg-gray-800 text-white rounded-full shadow-xl flex flex-col items-center justify-center transition active:scale-95">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="1.5"/><polyline points="12 6 12 12 16 14" stroke-width="1.5"/></svg>
+        <span id="timer-bubble" class="text-[9px] font-mono mt-0.5 opacity-70">25:00</span>
+    </button>
+</div>
+<div id="focus-timer" class="hidden fixed bottom-6 right-5 sm:right-7 z-50 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 w-52 select-none">
+    <div class="flex items-center justify-between mb-1">
+        <button onclick="collapseTimer()" class="text-gray-400 hover:text-gray-700 transition text-lg leading-none" title="收起">↙</button>
+        <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Focus</span>
+        <button onclick="dismissTimer()" class="text-gray-400 hover:text-red-400 transition text-sm" title="關閉">✕</button>
+    </div>
+    <p id="timer-task-label" class="text-xs text-gray-400 truncate mb-2 leading-tight text-center"></p>
+    <div id="timer-display" class="text-5xl font-mono font-bold text-gray-900 text-center mb-3 leading-none transition-colors">25:00</div>
+    <div class="flex gap-2">
+        <button id="timer-start-btn" onclick="timerStartPause()" class="flex-1 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-bold transition active:scale-95">開始</button>
+        <button onclick="timerReset()" class="w-10 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 text-base border border-gray-200 transition active:scale-95 flex items-center justify-center">↺</button>
+    </div>
+</div>
+
+<script>
+    // ── Toast 通知 ────────────────────────────────────────────────
+    function showToast(msg, type = 'error') {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        const bg = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-emerald-500' : 'bg-gray-700';
+        el.className = `pointer-events-auto ${bg} text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-xl transition-all duration-300 opacity-0 translate-y-2`;
+        el.textContent = msg;
+        container.appendChild(el);
+        requestAnimationFrame(() => { el.classList.remove('opacity-0', 'translate-y-2'); });
+        setTimeout(() => {
+            el.classList.add('opacity-0');
+            setTimeout(() => el.remove(), 300);
+        }, 3500);
+    }
+
+    // ── 全域安全 fetch wrapper ────────────────────────────────────
+    async function apiFetch(url, body) {
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                showToast(`操作失敗：${data.msg || res.status}`);
+                return null;
+            }
+            return await res.json();
+        } catch (e) {
+            showToast('網路錯誤，請確認連線後重試');
+            return null;
+        }
+    }
+
+    // ── 全域資料 ─────────────────────────────────────────────────
+    const SCHEDULE_DATA    = {{ data.schedule | tojson }};
+    const DEADLINES_CAL    = {{ deadlines | tojson }};
+    const DEADLINES_SERVER = {{ data.deadlines | tojson }};
+    const FIXED_SCHEDULE   = {{ fixed_schedule | tojson }};
+    const STUDY_PLAN_DATA  = {{ data.study_plan | tojson }};
+    const TODAY            = "{{ current_date }}";
+
+    // ── Inbox ────────────────────────────────────────────────────
+    async function addToInbox() {
+        const input = document.getElementById('inbox-input');
+        const item = input.value.trim();
+        if (!item) return;
+        const res = await apiFetch('/api/add_inbox', { item });
+        if (!res) return;
+        input.value = '';
+        window.location.reload();
+    }
+
+    async function inlineDebt(item) {
+        const hours = prompt(`「${item}」預估需要幾小時？(例: 0.5, 2)`);
+        if (!hours || isNaN(hours) || parseFloat(hours) <= 0) return;
+        const res = await apiFetch('/api/triage', { item, action: 'debt', hours: parseFloat(hours) });
+        if (!res) return;
+        window.location.reload();
+    }
+
+    async function inlineDel(item) {
+        const res = await apiFetch('/api/triage', { item, action: 'delete' });
+        if (!res) return;
+        window.location.reload();
+    }
+
+    // ── 習慣追蹤 ────────────────────────────────────────────────
+    const HABIT_DEFS = {{ habit_defs | tojson }};
+    let habitToday   = {{ habit_today | tojson }};
+
+    async function toggleHabit(habit, idx) {
+        const res = await fetch('/api/toggle_habit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: TODAY, habit })
+        });
+        const { done } = await res.json();
+        if (done) habitToday.push(habit); else habitToday = habitToday.filter(h => h !== habit);
+
+        const btn = document.getElementById(`habit-${idx}`);
+        const circle = btn.querySelector('div');
+        const label  = btn.querySelector('span:nth-child(2)');
+
+        if (done) {
+            circle.className = 'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition bg-gray-900 border-gray-900';
+            circle.innerHTML = '<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>';
+            label.className = 'text-sm flex-1 line-through text-gray-400';
+        } else {
+            circle.className = 'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition border-gray-300';
+            circle.innerHTML = '';
+            label.className = 'text-sm flex-1 text-gray-700';
+        }
+        document.getElementById('habit-count').textContent = `${habitToday.length}/${HABIT_DEFS.length}`;
+    }
+
+    // ── 固定課表 ─────────────────────────────────────────────────
+    function toggleFixedPanel() {
+        const panel = document.getElementById('fixed-panel');
+        const label = document.getElementById('fixed-btn-label');
+        const show = panel.classList.toggle('hidden') === false;
+        label.textContent = show ? '隱藏課表' : '固定課表 ({{ fixed_today|length }})';
+    }
+
+    // ── 使用者管理 ────────────────────────────────────────────────
+    function openUserPicker()  { document.getElementById('user-picker').classList.remove('hidden'); }
+    function closeUserPicker(e) {
+        if (e && e.target !== document.getElementById('user-picker')) return;
+        document.getElementById('user-picker').classList.add('hidden');
+    }
+    async function switchUser(userId) {
+        await fetch('/api/switch_user', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: userId }) });
+        window.location.reload();
+    }
+    async function createUser() {
+        const name   = document.getElementById('new-user-name').value.trim();
+        const avatar = document.getElementById('new-user-avatar').value.trim() || '😊';
+        if (!name) return;
+        const res = await fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, avatar }) });
+        const { status, id } = await res.json();
+        if (status === 'success') {
+            await fetch('/api/switch_user', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: id }) });
+            window.location.reload();
+        }
+    }
+    async function deleteUser(userId, name) {
+        if (!confirm(`刪除用戶「${name}」？他的所有資料也會一起刪除。`)) return;
+        await fetch('/api/delete_user', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: userId }) });
+        window.location.reload();
+    }
+
+    // ── 任務操作 ─────────────────────────────────────────────────
+    async function toggleTask(date, index) {
+        const res = await apiFetch('/api/toggle', { date, index });
+        if (!res) return;
+        window.location.reload();
+    }
+
+    // ── Study Plan ───────────────────────────────────────────────
+    async function updateChapter(subject, delta) {
+        const res = await apiFetch('/api/update_study', { subject, delta });
+        if (!res) return;
+        window.location.reload();
+    }
+    function toggleAddSubject() {
+        document.getElementById('add-subject-form').classList.toggle('hidden');
+        document.getElementById('new-subject-name').focus();
+    }
+    async function addSubject() {
+        const name  = document.getElementById('new-subject-name').value.trim();
+        const total = parseInt(document.getElementById('new-subject-total').value) || 10;
+        if (!name) return;
+        const res = await apiFetch('/api/add_subject', { name, total });
+        if (!res) return;
+        window.location.reload();
+    }
+
+    // ── Subject Modal ────────────────────────────────────────────
+    let modalSubject = null;
+    function openSubjectModal(subject) {
+        modalSubject = subject;
+        const prog = STUDY_PLAN_DATA[subject];
+        if (!prog) return;
+        document.getElementById('modal-title').textContent = subject;
+        document.getElementById('modal-subtitle').textContent = `${prog.finished}/${prog.total} 章 · ${Math.round(prog.finished/prog.total*100)||0}% 完成`;
+        document.getElementById('study-date').value = TODAY;
+
+        const chNames = prog.chapter_names || null;
+        const grid = document.getElementById('modal-chapters');
+        grid.innerHTML = '';
+        for (let i = 0; i < prog.total; i++) {
+            const name = chNames ? (chNames[i] || `Ch${i+1}`) : `Ch${i+1}`;
+            const done = i < prog.finished;
+            const isCurrent = i === prog.finished;
+            const chip = document.createElement('button');
+            chip.className = [
+                'text-[11px] px-2 py-1.5 rounded-lg border text-left leading-tight transition',
+                done    ? 'bg-emerald-50 border-emerald-200 text-emerald-600 line-through opacity-70'
+                        : isCurrent ? 'bg-blue-50 border-blue-300 text-blue-700 ring-1 ring-blue-300'
+                                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+            ].join(' ');
+            chip.textContent = (chNames ? '' : `Ch${i+1} `) + name;
+            chip.onclick = () => { document.getElementById('study-chapter').value = (chNames ? name : `Ch${i+1}`); };
+            grid.appendChild(chip);
+        }
+
+        const remaining = prog.total - prog.finished;
+        document.getElementById('modal-stats').innerHTML = `
+            <div class="flex-1 bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
+                <div class="text-[10px] text-gray-400 mb-0.5">剩餘章節</div>
+                <div class="text-base font-bold font-mono text-gray-800">${remaining} 章</div>
+            </div>
+            <div class="flex-1 bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
+                <div class="text-[10px] text-gray-400 mb-0.5">估算時數</div>
+                <div class="text-base font-bold font-mono text-blue-600">≈ ${remaining*3}h</div>
+            </div>`;
+
+        document.getElementById('modal-notes').value = prog.notes || '';
+        document.getElementById('subject-modal').classList.remove('hidden');
+    }
+    async function saveStudyNotes() {
+        if (!modalSubject) return;
+        const notes = document.getElementById('modal-notes').value;
+        const statusEl = document.getElementById('notes-save-status');
+        statusEl.textContent = '儲存中…';
+        await fetch('/api/update_study_notes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subject: modalSubject, notes }) });
+        if (STUDY_PLAN_DATA[modalSubject]) STUDY_PLAN_DATA[modalSubject].notes = notes;
+        statusEl.textContent = '✓ 已儲存';
+        setTimeout(() => { statusEl.textContent = '失焦自動存'; }, 2000);
+    }
+    function closeSubjectModal(e) {
+        if (e && e.target !== document.getElementById('subject-modal')) return;
+        document.getElementById('subject-modal').classList.add('hidden');
+        modalSubject = null;
+    }
+    let _studyMode = 'single';
+    function setStudyMode(mode) {
+        _studyMode = mode;
+        document.getElementById('study-mode-single').className = mode==='single'
+            ? 'text-xs px-2.5 py-1 rounded-lg border border-gray-900 bg-gray-900 text-white font-medium transition'
+            : 'text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 font-medium transition';
+        document.getElementById('study-mode-multi').className = mode==='multi'
+            ? 'text-xs px-2.5 py-1 rounded-lg border border-gray-900 bg-gray-900 text-white font-medium transition'
+            : 'text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 font-medium transition';
+        document.getElementById('study-date-single').style.display = mode==='single' ? 'grid' : 'none';
+        document.getElementById('study-date-multi').style.display  = mode==='multi'  ? 'grid' : 'none';
+    }
+
+    async function scheduleStudy() {
+        const time    = document.getElementById('study-time').value;
+        const chapter = document.getElementById('study-chapter').value.trim();
+        const dur     = parseInt(document.getElementById('study-dur').value) || 120;
+        if (!modalSubject) return;
+
+        let dates = [];
+        if (_studyMode === 'single') {
+            const date = document.getElementById('study-date').value;
+            if (!date) return;
+            dates = [date];
+        } else {
+            const from = document.getElementById('study-date-from').value;
+            const to   = document.getElementById('study-date-to').value;
+            if (!from || !to || from > to) return;
+            let cur = new Date(from + 'T00:00:00');
+            const end = new Date(to + 'T00:00:00');
+            while (cur <= end) {
+                const mm = String(cur.getMonth()+1).padStart(2,'0');
+                const dd = String(cur.getDate()).padStart(2,'0');
+                dates.push(`${cur.getFullYear()}-${mm}-${dd}`);
+                cur.setDate(cur.getDate()+1);
+            }
+        }
+
+        const btn = document.querySelector('#subject-modal button[onclick="scheduleStudy()"]');
+        btn.textContent = '加入中…'; btn.disabled = true;
+        for (const date of dates) {
+            await fetch('/api/schedule_study', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date, subject: modalSubject, chapter, time, duration: dur }) });
+            if (!SCHEDULE_DATA[date]) SCHEDULE_DATA[date] = [];
+            SCHEDULE_DATA[date].push({ time, task: `${modalSubject} ${chapter}`.trim(), duration: dur, completed: false });
+            SCHEDULE_DATA[date].sort((a, b) => a.time.localeCompare(b.time));
+        }
+        btn.textContent = `✓ 已加入 ${dates.length} 天！`; btn.disabled = false;
+        setTimeout(() => { btn.textContent = '＋ 加入行事曆'; }, 2000);
+        if (dates.includes(TODAY)) window.location.reload();
+    }
+
+    // ── Focus Timer ──────────────────────────────────────────────
+    let timerSeconds = 25 * 60, timerInterval = null, timerRunning = false;
+
+    function startFocusTimer(taskName) {
+        clearInterval(timerInterval); timerRunning = false; timerSeconds = 25 * 60;
+        document.getElementById('timer-task-label').textContent = taskName;
+        document.getElementById('timer-display').textContent = '25:00';
+        document.getElementById('timer-bubble').textContent = '25:00';
+        document.getElementById('timer-start-btn').textContent = '開始';
+        document.getElementById('focus-timer').classList.add('hidden');
+        document.getElementById('focus-timer-btn').classList.remove('hidden');
+    }
+    function expandTimer() {
+        document.getElementById('focus-timer-btn').classList.add('hidden');
+        document.getElementById('focus-timer').classList.remove('hidden');
+    }
+    function collapseTimer() {
+        document.getElementById('focus-timer').classList.add('hidden');
+        document.getElementById('focus-timer-btn').classList.remove('hidden');
+    }
+    function timerStartPause() {
+        if (timerRunning) {
+            clearInterval(timerInterval); timerRunning = false;
+            document.getElementById('timer-start-btn').textContent = '繼續';
+        } else {
+            timerRunning = true;
+            document.getElementById('timer-start-btn').textContent = '暫停';
+            timerInterval = setInterval(async () => {
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval); timerRunning = false;
+                    document.getElementById('timer-display').textContent = '00:00';
+                    document.getElementById('timer-display').classList.add('text-emerald-600');
+                    document.getElementById('timer-start-btn').textContent = '完成！';
+                    // 記錄番茄鐘
+                    const r = await fetch('/api/add_pomodoro', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: TODAY }) });
+                    const { count } = await r.json();
+                    const badge = document.getElementById('pomo-badge');
+                    const cnt   = document.getElementById('pomo-count');
+                    if (badge && cnt) { cnt.textContent = count; badge.classList.remove('hidden'); }
+                    if (Notification.permission === 'granted')
+                        new Notification('Pomodoro 結束！', { body: document.getElementById('timer-task-label').textContent });
+                    return;
+                }
+                timerSeconds--;
+                const m = String(Math.floor(timerSeconds/60)).padStart(2,'0');
+                const s = String(timerSeconds%60).padStart(2,'0');
+                const t = `${m}:${s}`;
+                document.getElementById('timer-display').textContent = t;
+                document.getElementById('timer-bubble').textContent = t;
+            }, 1000);
+        }
+    }
+    function timerReset() {
+        clearInterval(timerInterval); timerRunning = false; timerSeconds = 25*60;
+        document.getElementById('timer-display').textContent = '25:00';
+        document.getElementById('timer-bubble').textContent = '25:00';
+        document.getElementById('timer-start-btn').textContent = '開始';
+        document.getElementById('timer-display').classList.remove('text-emerald-600');
+    }
+    function dismissTimer() {
+        clearInterval(timerInterval); timerRunning = false;
+        document.getElementById('focus-timer').classList.add('hidden');
+        document.getElementById('focus-timer-btn').classList.add('hidden');
+    }
+
+    // ── Calendar colors (light theme) ────────────────────────────
+    const CAL_COLORS = [
+        { name:'indigo',  pill:'bg-indigo-100 text-indigo-700',   dot:'bg-indigo-400'   },
+        { name:'violet',  pill:'bg-violet-100 text-violet-700',   dot:'bg-violet-400'   },
+        { name:'teal',    pill:'bg-teal-100 text-teal-700',       dot:'bg-teal-400'     },
+        { name:'amber',   pill:'bg-amber-100 text-amber-700',     dot:'bg-amber-400'    },
+        { name:'pink',    pill:'bg-pink-100 text-pink-700',       dot:'bg-pink-400'     },
+        { name:'cyan',    pill:'bg-cyan-100 text-cyan-700',       dot:'bg-cyan-400'     },
+        { name:'emerald', pill:'bg-emerald-100 text-emerald-700', dot:'bg-emerald-400'  },
+        { name:'orange',  pill:'bg-orange-100 text-orange-700',   dot:'bg-orange-400'   },
+        { name:'rose',    pill:'bg-rose-100 text-rose-700',       dot:'bg-rose-400'     },
+        { name:'blue',    pill:'bg-blue-100 text-blue-700',       dot:'bg-blue-400'     },
+    ];
+    let selectedColor = 'indigo';
+
+    function renderColorPicker() {
+        const picker = document.getElementById('task-color-picker');
+        if (!picker) return;
+        picker.innerHTML = '';
+        CAL_COLORS.forEach(c => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            const isSel = selectedColor === c.name;
+            btn.className = `w-5 h-5 rounded-full ${c.dot} transition-transform ${isSel ? 'ring-2 ring-gray-900 ring-offset-1 scale-125' : 'hover:scale-110 opacity-60 hover:opacity-100'}`;
+            btn.title = c.name;
+            btn.onclick = () => { selectedColor = c.name; renderColorPicker(); };
+            picker.appendChild(btn);
+        });
+    }
+
+    function hashStr(str) {
+        let h = 5381;
+        for (let i = 0; i < str.length; i++) h = (h*33 + str.charCodeAt(i)) & 0xffffffff;
+        return Math.abs(h);
+    }
+    function getEventStyle(taskName, colorName) {
+        const c = CAL_COLORS.find(x => x.name === (colorName||''));
+        return (c || CAL_COLORS[hashStr(taskName) % CAL_COLORS.length]).pill.split(' ');
+    }
+    function getBarColor(taskName, colorName) {
+        const c = CAL_COLORS.find(x => x.name === (colorName||''));
+        return (c || CAL_COLORS[hashStr(taskName) % CAL_COLORS.length]).dot;
+    }
+
+    // ── Calendar rendering (Google style) ────────────────────────
+    let calYear, calMonth, selectedDate = null;
+
+    function initCalendar() {
+        const t = new Date(TODAY + 'T00:00:00');
+        calYear = t.getFullYear(); calMonth = t.getMonth();
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+        document.getElementById('cal-month-label').textContent = `${calYear} 年 ${MONTH_NAMES[calMonth]}`;
+
+        const grid = document.getElementById('cal-grid');
+        grid.innerHTML = '';
+
+        const firstDay  = new Date(calYear, calMonth, 1).getDay();
+        const daysInMon = new Date(calYear, calMonth+1, 0).getDate();
+        const daysInPrev= new Date(calYear, calMonth, 0).getDate();
+
+        const dlMap = {};
+        DEADLINES_CAL.forEach(dl => { dlMap[dl.date] = dl; });
+
+        for (let i = 0; i < 42; i++) {
+            let dayNum, dateStr, isCurrent = true;
+            if (i < firstDay) {
+                dayNum = daysInPrev - firstDay + i + 1;
+                const pm = calMonth===0 ? 12 : calMonth;
+                const py = calMonth===0 ? calYear-1 : calYear;
+                dateStr = `${py}-${String(pm).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+                isCurrent = false;
+            } else if (i >= firstDay + daysInMon) {
+                dayNum = i - firstDay - daysInMon + 1;
+                const nm = calMonth===11 ? 1 : calMonth+2;
+                const ny = calMonth===11 ? calYear+1 : calYear;
+                dateStr = `${ny}-${String(nm).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+                isCurrent = false;
+            } else {
+                dayNum = i - firstDay + 1;
+                dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+            }
+
+            const isToday    = dateStr === TODAY;
+            const isSelected = dateStr === selectedDate;
+            const tasks      = SCHEDULE_DATA[dateStr] || [];
+            const dl         = dlMap[dateStr];
+            const isSun      = (i%7===0), isSat = (i%7===6);
+
+            const cell = document.createElement('div');
+            cell.className = [
+                'cal-cell relative min-h-[70px] sm:min-h-[90px] p-1 sm:p-1.5 cursor-pointer transition-colors overflow-hidden',
+                !isCurrent ? 'bg-gray-50' :
+                isSelected  ? 'bg-gray-100' :
+                isToday     ? 'bg-blue-50' :
+                              'bg-white hover:bg-gray-50'
+            ].join(' ');
+            cell.onclick = () => openDayPanel(dateStr);
+
+            // Day number
+            const badge = document.createElement('div');
+            badge.className = [
+                'w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-xs font-bold mb-0.5 transition-colors',
+                isToday ? 'bg-gray-900 text-white'
+                        : !isCurrent ? 'text-gray-300'
+                        : isSun ? 'text-red-400'
+                        : isSat ? 'text-sky-500'
+                        : isSelected ? 'text-gray-900 font-extrabold'
+                        : 'text-gray-700'
+            ].join(' ');
+            badge.textContent = dayNum;
+            cell.appendChild(badge);
+
+            // Deadline pill
+            if (dl) {
+                const dlBar = document.createElement('div');
+                dlBar.className = 'text-[9px] px-1 py-0.5 rounded bg-red-100 text-red-600 truncate font-semibold mb-0.5 leading-tight';
+                dlBar.textContent = '⚑ ' + dl.name;
+                cell.appendChild(dlBar);
+            }
+
+            // Task pills (max 2 on mobile, 3 on desktop)
+            tasks.slice(0, 3).forEach(t => {
+                const [bg, fg] = t.completed ? ['bg-gray-100','text-gray-400'] : getEventStyle(t.task, t.color);
+                const pill = document.createElement('div');
+                pill.className = `text-[10px] leading-tight rounded px-1 py-0.5 mb-0.5 truncate font-medium ${bg} ${fg} ${t.completed ? 'line-through opacity-50' : ''}`;
+                pill.textContent = t.task;
+                cell.appendChild(pill);
+            });
+            if (tasks.length > 3) {
+                const more = document.createElement('div');
+                more.className = 'text-[9px] text-gray-400 pl-1 mt-0.5';
+                more.textContent = `+${tasks.length-3}`;
+                cell.appendChild(more);
+            }
+
+            grid.appendChild(cell);
+        }
+    }
+
+    function prevMonth() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+    function nextMonth() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
+    function goToday() {
+        const t = new Date(TODAY+'T00:00:00');
+        calYear = t.getFullYear(); calMonth = t.getMonth();
+        renderCalendar(); openDayPanel(TODAY);
+    }
+
+    // ── Day Detail Panel ─────────────────────────────────────────
+    const PANEL_DESKTOP = 'flex flex-col w-72 border-l border-gray-200 bg-white';
+    const PANEL_MOBILE  = 'flex flex-col fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 rounded-t-2xl shadow-2xl';
+
+    function openDayPanel(dateStr) {
+        selectedDate = dateStr;
+        renderCalendar();
+        const panel = document.getElementById('day-panel');
+        const isMobile = window.innerWidth < 1024;
+        panel.className = isMobile ? PANEL_MOBILE : PANEL_DESKTOP;
+        if (isMobile) { panel.style.maxHeight='80vh'; panel.style.overflowY='auto'; document.getElementById('cal-backdrop').classList.remove('hidden'); }
+        else { panel.style.maxHeight=''; panel.style.overflowY=''; }
+        const d = new Date(dateStr+'T00:00:00');
+        const WFULL = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+        document.getElementById('panel-date').textContent = `${d.getMonth()+1} 月 ${d.getDate()} 日`;
+        document.getElementById('panel-date-sub').textContent = WFULL[d.getDay()] + (dateStr===TODAY ? ' · 今天' : '');
+        renderPanelTasks(dateStr);
+    }
+    function closeDayPanel() {
+        selectedDate = null;
+        document.getElementById('day-panel').className = 'hidden';
+        document.getElementById('day-panel').style.maxHeight = '';
+        document.getElementById('cal-backdrop').classList.add('hidden');
+        renderCalendar();
+    }
+    window.addEventListener('resize', () => { if (selectedDate) openDayPanel(selectedDate); });
+
+    function renderPanelTasks(dateStr) {
+        const container = document.getElementById('panel-tasks');
+        container.innerHTML = '';
+        const tasks = SCHEDULE_DATA[dateStr] || [];
+        const dow = new Date(dateStr+'T00:00:00').getDay();
+        const fixedItems = FIXED_SCHEDULE[String(dow)] || [];
+        const dl = DEADLINES_CAL.find(x => x.date === dateStr);
+
+        if (dl) {
+            const dlEl = document.createElement('div');
+            dlEl.className = 'flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 mb-3';
+            dlEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-pulse"></span>
+                              <span class="text-xs font-bold text-red-700 flex-1 truncate">${dl.name}</span>
+                              <span class="text-[10px] text-red-400">${dl.note||''}</span>`;
+            container.appendChild(dlEl);
+        }
+        if (fixedItems.length > 0) {
+            const sec = document.createElement('div');
+            sec.className = 'mb-3';
+            sec.innerHTML = '<p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 px-1">固定課表</p>';
+            fixedItems.forEach(ft => {
+                const el = document.createElement('div');
+                el.className = 'flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 mb-1';
+                el.innerHTML = `<div class="w-0.5 h-6 rounded-full bg-gray-300 shrink-0"></div>
+                                <span class="font-mono text-xs text-gray-400 shrink-0">${ft.time}</span>
+                                <span class="flex-1 text-xs text-gray-600 truncate">${ft.task}</span>
+                                <span class="text-[10px] text-gray-300">${ft.duration}m</span>`;
+                sec.appendChild(el);
+            });
+            container.appendChild(sec);
+        }
+        if (tasks.length === 0) {
+            if (!dl && fixedItems.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'flex flex-col items-center py-8 text-gray-400';
+                empty.innerHTML = `<svg class="w-8 h-8 mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><p class="text-sm">這天還沒有排程</p>`;
+                container.appendChild(empty);
+            }
+            return;
+        }
+        const sec = document.createElement('div');
+        sec.innerHTML = '<p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 px-1">行程</p>';
+        tasks.forEach((t, idx) => {
+            const barColor = getBarColor(t.task, t.color);
+            const item = document.createElement('div');
+            item.className = `group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border mb-1.5 transition cursor-pointer
+                ${t.completed ? 'opacity-50 border-gray-100 bg-gray-50' : 'border-gray-100 bg-white hover:bg-gray-50'}`;
+            item.innerHTML = `
+                <div class="w-1 h-8 rounded-full shrink-0 ${t.completed ? 'bg-gray-200' : barColor}"></div>
+                <div class="flex-1 min-w-0" onclick="toggleTaskFromCal('${dateStr}', ${idx})">
+                    <div class="text-sm font-medium leading-tight ${t.completed ? 'line-through text-gray-400' : 'text-gray-800'} truncate">${t.task}</div>
+                    <div class="text-[11px] text-gray-400 mt-0.5">${t.time} · ${t.duration}min</div>
+                </div>
+                <button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-400 transition shrink-0"
+                    onclick="deleteTaskFromCal('${dateStr}', ${idx})">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>`;
+            sec.appendChild(item);
+        });
+        container.appendChild(sec);
+    }
+
+    async function toggleTaskFromCal(dateStr, idx) {
+        await fetch('/api/toggle', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, index: idx }) });
+        const tasks = SCHEDULE_DATA[dateStr];
+        if (tasks && tasks[idx]) tasks[idx].completed = !tasks[idx].completed;
+        renderCalendar();
+        if (dateStr === TODAY) {
+            window.location.reload();
+        } else {
+            renderPanelTasks(dateStr);
+            setTimeout(() => closeDayPanel(), 400);
+        }
+    }
+    async function deleteTaskFromCal(dateStr, idx) {
+        if (!confirm(`刪除「${SCHEDULE_DATA[dateStr][idx].task}」？`)) return;
+        await fetch('/api/delete_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, index: idx }) });
+        SCHEDULE_DATA[dateStr].splice(idx, 1);
+        renderCalendar(); renderPanelTasks(dateStr);
+        if (dateStr === TODAY) window.location.reload();
+    }
+    async function addTaskFromCal() {
+        const nameEl = document.getElementById('new-task-name');
+        const taskName = nameEl.value.trim();
+        if (!taskName || !selectedDate) return;
+        const isAllDay = document.getElementById('task-all-day').checked;
+        let time = '00:00', dur = 1440;
+        if (!isAllDay) {
+            time = document.getElementById('new-task-time').value || '09:00';
+            const endTime = document.getElementById('new-task-end-time').value || '10:00';
+            // Compute duration in minutes from time range
+            const [sh, sm] = time.split(':').map(Number);
+            const [eh, em] = endTime.split(':').map(Number);
+            dur = Math.max(5, (eh * 60 + em) - (sh * 60 + sm));
+            if (dur <= 0) dur = 60;
+        }
+        const color = selectedColor;
+        await fetch('/api/add_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: selectedDate, task: taskName, time, duration: dur, color }) });
+        if (!SCHEDULE_DATA[selectedDate]) SCHEDULE_DATA[selectedDate] = [];
+        SCHEDULE_DATA[selectedDate].push({ time, task: taskName, duration: dur, completed: false, color });
+        SCHEDULE_DATA[selectedDate].sort((a, b) => a.time.localeCompare(b.time));
+        nameEl.value = '';
+        document.getElementById('task-all-day').checked = false;
+        toggleAllDayInput();
+        selectedColor = 'indigo'; renderColorPicker();
+        renderCalendar(); renderPanelTasks(selectedDate);
+        if (selectedDate === TODAY) window.location.reload();
+    }
+
+    // ── Weekly strip (in calendar header) ────────────────────────
+    function renderWeeklyStrip() {
+        const container = document.getElementById('weekly-strip');
+        if (!container) return;
+        container.innerHTML = '';
+        const todayDate = new Date(TODAY+'T00:00:00');
+        const jsDay = todayDate.getDay();
+        const monday = new Date(todayDate);
+        monday.setDate(todayDate.getDate() - ((jsDay+6)%7));
+        const DAY_LABELS = ['日','一','二','三','四','五','六'];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(monday); d.setDate(monday.getDate()+i);
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const dd = String(d.getDate()).padStart(2,'0');
+            const dStr = `${d.getFullYear()}-${mm}-${dd}`;
+            const isToday = dStr === TODAY;
+            const tasks = SCHEDULE_DATA[dStr] || [];
+            const allDone = tasks.length > 0 && tasks.every(t => t.completed);
+
+            const col = document.createElement('button');
+            col.className = `flex flex-col items-center gap-0.5 w-9 py-1.5 rounded-lg transition ${isToday ? 'bg-gray-900 text-white' : 'hover:bg-gray-100 text-gray-500'}`;
+            col.onclick = () => openDayPanel(dStr);
+
+            const lbl = document.createElement('span');
+            lbl.className = 'text-[9px] font-medium leading-none opacity-70';
+            lbl.textContent = DAY_LABELS[d.getDay()];
+            col.appendChild(lbl);
+
+            const num = document.createElement('span');
+            num.className = `text-xs font-bold leading-none ${allDone ? 'text-emerald-500' : ''}`;
+            num.textContent = d.getDate();
+            col.appendChild(num);
+
+            if (tasks.length > 0) {
+                const dot = document.createElement('span');
+                dot.className = `w-1 h-1 rounded-full ${isToday ? 'bg-white/60' : allDone ? 'bg-emerald-400' : 'bg-gray-400'}`;
+                col.appendChild(dot);
+            }
+            container.appendChild(col);
+        }
+    }
+
+    // ── Swipe-to-action ─────────────────────────────────────────
+    let _openSwipe = null;
+
+    function initSwipe(contentEl, actions) {
+        const wrap = contentEl.parentElement;
+        const W = actions.length * 72;
+        wrap.style.position = 'relative';
+        wrap.style.overflow = 'hidden';
+
+        const track = document.createElement('div');
+        track.style.cssText = `display:flex; align-items:stretch; will-change:transform;`;
+        wrap.insertBefore(track, contentEl);
+        track.appendChild(contentEl);
+
+        const actEl = document.createElement('div');
+        actEl.style.cssText = `display:flex; flex-shrink:0; width:${W}px;`;
+        actions.forEach(a => {
+            const btn = document.createElement('button');
+            btn.textContent = a.label;
+            btn.style.cssText = `flex:1; background:${a.bg||'#ef4444'}; color:#fff; font-size:0.78rem; font-weight:700; border:none; cursor:pointer;`;
+            btn.addEventListener('click', e => { e.stopPropagation(); closeAllSwipes(); a.fn(); });
+            actEl.appendChild(btn);
+        });
+        track.appendChild(actEl);
+
+        requestAnimationFrame(() => {
+            contentEl.style.flexShrink = '0';
+            contentEl.style.width = wrap.offsetWidth + 'px';
+        });
+
+        let sx = 0, sy = 0, opened = false;
+        contentEl.addEventListener('touchstart', e => {
+            sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+            track.style.transition = 'none';
+        }, {passive:true});
+        contentEl.addEventListener('touchmove', e => {
+            const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+            if (Math.abs(dy) > Math.abs(dx)) return;
+            track.style.transform = `translateX(${Math.max(-W, Math.min(0, (opened?-W:0)+dx))}px)`;
+        }, {passive:true});
+        contentEl.addEventListener('touchend', e => {
+            const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+            if (Math.abs(dy) > Math.abs(dx) && Math.abs(dx) < 10) return;
+            track.style.transition = 'transform 0.22s ease';
+            if (!opened && dx < -30) {
+                track.style.transform = `translateX(-${W}px)`; opened = true;
+                if (_openSwipe && _openSwipe !== closeThis) _openSwipe();
+                _openSwipe = closeThis;
+            } else if (opened && dx > 20) {
+                closeThis();
+            } else {
+                track.style.transform = opened ? `translateX(-${W}px)` : 'translateX(0)';
+            }
+        }, {passive:true});
+        contentEl.addEventListener('click', e => { if (opened) { e.stopPropagation(); closeThis(); } });
+
+        function closeThis() {
+            track.style.transition = 'transform 0.22s ease';
+            track.style.transform = 'translateX(0)';
+            opened = false;
+            if (_openSwipe === closeThis) _openSwipe = null;
+        }
+        return closeThis;
+    }
+    function closeAllSwipes() { if (_openSwipe) { _openSwipe(); _openSwipe = null; } }
+
+    // ── Apply swipes ─────────────────────────────────────────────
+    function initTodaySwipes() {
+        document.querySelectorAll('[data-swipe-task]').forEach(wrap => {
+            const date = wrap.dataset.date, idx = parseInt(wrap.dataset.idx);
+            const cEl = wrap.querySelector('.swipe-content');
+            if (!cEl) return;
+            initSwipe(cEl, [
+                { label:'編輯', bg:'#6366f1', fn: () => openEditTaskModal(date, idx) },
+                { label:'刪除', bg:'#ef4444', fn: () => { if(confirm('刪除此任務？')) deleteTaskDirect(date, idx); } }
+            ]);
+        });
+    }
+    async function deleteTaskDirect(date, idx) {
+        const res = await apiFetch('/api/delete_task', { date, index: idx });
+        if (!res) return;
+        window.location.reload();
+    }
+    function initInboxSwipes() {
+        document.querySelectorAll('.inbox-item').forEach(li => {
+            const item = li.dataset.item;
+            const cEl = li.querySelector('.swipe-content');
+            if (!cEl) return;
+            initSwipe(cEl, [
+                { label:'詳情', bg:'#0891b2', fn: () => openInboxDetail(item) },
+                { label:'刪除', bg:'#ef4444', fn: () => inlineDel(item)       }
+            ]);
+        });
+    }
+    function initDeadlineSwipes() {
+        document.querySelectorAll('[data-swipe-deadline]').forEach(wrap => {
+            const idx = parseInt(wrap.dataset.idx);
+            const cEl = wrap.querySelector('.swipe-content');
+            if (!cEl) return;
+            initSwipe(cEl, [
+                { label:'編輯', bg:'#6366f1', fn: () => openEditDeadlineModal(idx) },
+                { label:'刪除', bg:'#ef4444', fn: () => { if(confirm('刪除此截止日？')) deleteDeadline(idx); } }
+            ]);
+        });
+    }
+    async function deleteDeadline(idx) {
+        const res = await apiFetch('/api/delete_deadline', { index: idx });
+        if (!res) return;
+        window.location.reload();
+    }
+    function initDebtSwipes() {
+        document.querySelectorAll('[data-swipe-debt]').forEach(wrap => {
+            const key = wrap.dataset.key;
+            const cEl = wrap.querySelector('.swipe-content');
+            if (!cEl) return;
+            initSwipe(cEl, [
+                { label:'清除', bg:'#ef4444', fn: () => { if(confirm(`清除「${key}」的債務？`)) deleteDebt(key); } }
+            ]);
+        });
+    }
+    async function deleteDebt(key) {
+        const res = await apiFetch('/api/delete_debt', { key });
+        if (!res) return;
+        window.location.reload();
+    }
+    function initStudySwipes() {
+        document.querySelectorAll('[data-swipe-study]').forEach(wrap => {
+            const subject = wrap.dataset.subject;
+            const cEl = wrap.querySelector('.swipe-content');
+            if (!cEl) return;
+            initSwipe(cEl, [
+                { label:'詳情', bg:'#0891b2', fn: () => openSubjectModal(subject) },
+                { label:'刪除', bg:'#ef4444', fn: () => { if(confirm(`刪除「${subject}」？`)) deleteSubject(subject); } }
+            ]);
+        });
+    }
+    async function deleteSubject(name) {
+        const res = await apiFetch('/api/delete_subject', { name });
+        if (!res) return;
+        window.location.reload();
+    }
+
+    // ── Edit modals ──────────────────────────────────────────────
+    let _editDate = null, _editIdx = null;
+    function openEditTaskModal(date, idx) {
+        _editDate = date; _editIdx = idx;
+        const t = SCHEDULE_DATA[date]?.[idx];
+        if (!t) return;
+        document.getElementById('edit-task-name').value = t.task;
+        document.getElementById('edit-task-time').value = t.time;
+        document.getElementById('edit-task-dur').value  = t.duration;
+        document.getElementById('edit-task-modal').classList.remove('hidden');
+    }
+    async function saveEditTask() {
+        const res = await apiFetch('/api/edit_task', {
+            date: _editDate, index: _editIdx,
+            task:     document.getElementById('edit-task-name').value.trim(),
+            time:     document.getElementById('edit-task-time').value,
+            duration: document.getElementById('edit-task-dur').value
+        });
+        if (!res) return;
+        document.getElementById('edit-task-modal').classList.add('hidden');
+        window.location.reload();
+    }
+    let _editDlIdx = null;
+    function openEditDeadlineModal(idx) {
+        _editDlIdx = idx;
+        const dl = DEADLINES_SERVER[idx];
+        if (!dl) return;
+        document.getElementById('edit-dl-name').value = dl.name;
+        document.getElementById('edit-dl-date').value = dl.date;
+        document.getElementById('edit-dl-note').value = dl.note || '';
+        document.getElementById('edit-deadline-modal').classList.remove('hidden');
+    }
+    async function saveEditDeadline() {
+        const res = await apiFetch('/api/edit_deadline', {
+            index: _editDlIdx,
+            name: document.getElementById('edit-dl-name').value.trim(),
+            date: document.getElementById('edit-dl-date').value,
+            note: document.getElementById('edit-dl-note').value.trim()
+        });
+        if (!res) return;
+        document.getElementById('edit-deadline-modal').classList.add('hidden');
+        window.location.reload();
+    }
+
+    // ── 心情 ────────────────────────────────────────────────────
+    let _moodEmoji = '{{ mood_today.emoji }}';
+    async function saveMood(emoji) {
+        _moodEmoji = emoji;
+        document.querySelectorAll('#mood-btns button').forEach(btn => {
+            const isThis = btn.textContent === emoji;
+            btn.className = `text-base w-8 h-8 rounded-full hover:bg-gray-100 transition active:scale-90 ${isThis ? 'ring-2 ring-gray-400 bg-gray-100' : ''}`;
+        });
+        await fetch('/api/save_mood', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ date: TODAY, emoji, note: document.getElementById('mood-note').value }) });
+    }
+    async function saveMoodNote() {
+        const note = document.getElementById('mood-note').value;
+        await fetch('/api/save_mood', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ date: TODAY, emoji: _moodEmoji, note }) });
+    }
+
+    // ── 水分 / 睡眠 ──────────────────────────────────────────────
+    let _water = {{ health_today.water }}, _sleep = {{ health_today.sleep }};
+    async function adjustHealth(field, delta) {
+        if (field === 'water') {
+            _water = Math.max(0, Math.round((_water + delta) * 2) / 2);
+        } else {
+            _sleep = Math.max(0, Math.round((_sleep + delta) * 2) / 2);
+        }
+        const val = field === 'water' ? _water : _sleep;
+        const res = await fetch('/api/save_health', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ date: TODAY, field, value: val }) });
+        const { value } = await res.json();
+
+        if (field === 'water') {
+            document.getElementById('water-val').textContent = Math.round(value);
+            const dots = document.querySelectorAll('#section-health .bg-blue-400, #section-health .bg-gray-100');
+            // Re-render water dots
+            const dotContainer = document.querySelector('#section-health .flex.gap-0\\.5.mt-2.justify-center');
+            if (dotContainer) {
+                dotContainer.innerHTML = '';
+                for (let i = 0; i < 8; i++) {
+                    const d = document.createElement('div');
+                    d.className = `w-3 h-3 rounded-sm ${i < Math.round(value) ? 'bg-blue-400' : 'bg-gray-100'}`;
+                    dotContainer.appendChild(d);
+                }
+            }
+        } else {
+            document.getElementById('sleep-val').textContent = value;
+            const bar = document.getElementById('sleep-bar');
+            const pct = Math.min(value / 9 * 100, 100);
+            bar.style.width = pct + '%';
+            bar.style.background = value < 6 ? '#f87171' : value < 7 ? '#fbbf24' : '#34d399';
+        }
+    }
+
+    // ── 快速新增截止日 ────────────────────────────────────────────
+    async function quickAddDeadline() {
+        const name = document.getElementById('dl-quick-name').value.trim();
+        const date = document.getElementById('dl-quick-date').value;
+        if (!name || !date) return;
+        await fetch('/api/add_deadline', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ name, date }) });
+        window.location.reload();
+    }
+
+    // ── 任務上下移 ────────────────────────────────────────────────
+    async function moveTask(date, idx, direction) {
+        await fetch('/api/move_task', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ date, index: idx, direction }) });
+        window.location.reload();
+    }
+
+    // ── 習慣熱力列 ────────────────────────────────────────────────
+    function renderHabitHeatmap() {
+        const container = document.getElementById('habit-heatmap');
+        if (!container) return;
+        container.innerHTML = '';
+        const DAY_LABELS = ['日','一','二','三','四','五','六'];
+        const habitLogs = {{ data.habit_logs | tojson }};
+        const habitTotal = {{ habit_defs | length }};
+        const todayDate = new Date(TODAY + 'T00:00:00');
+        const jsDay = todayDate.getDay();
+        const monday = new Date(todayDate);
+        monday.setDate(todayDate.getDate() - ((jsDay + 6) % 7));
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(monday); d.setDate(monday.getDate() + i);
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const dd = String(d.getDate()).padStart(2,'0');
+            const dStr = `${d.getFullYear()}-${mm}-${dd}`;
+            const done = (habitLogs[dStr] || []).length;
+            const pct  = habitTotal > 0 ? done / habitTotal : 0;
+            const isToday = dStr === TODAY;
+            const col = document.createElement('div');
+            col.className = 'flex flex-col items-center gap-1 flex-1';
+            const bar = document.createElement('div');
+            bar.className = `w-full rounded transition-all`;
+            bar.style.height = '32px';
+            bar.style.background = pct >= 1 ? '#1f2937' : pct >= 0.5 ? '#6b7280' : pct > 0 ? '#d1d5db' : '#f3f4f6';
+            bar.style.opacity = isToday ? '1' : '0.7';
+            const lbl = document.createElement('span');
+            lbl.className = `text-[9px] font-medium ${isToday ? 'text-gray-900 font-bold' : 'text-gray-400'}`;
+            lbl.textContent = DAY_LABELS[d.getDay()];
+            const cnt = document.createElement('span');
+            cnt.className = 'text-[9px] font-mono text-gray-400';
+            cnt.textContent = done > 0 ? `${done}/${habitTotal}` : '';
+            col.appendChild(bar); col.appendChild(lbl); col.appendChild(cnt);
+            container.appendChild(col);
+        }
+    }
+
+    // ── Section collapse / dock ───────────────────────────────────
+    const SECTION_META = {
+        'section-today':    { icon: '📅', label: '今日事項' },
+        'section-debt':     { icon: '⏳', label: '時間債'   },
+        'section-habits':   { icon: '✅', label: '習慣'     },
+        'section-health':   { icon: '💧', label: '今日記錄' },
+        'section-study':    { icon: '📖', label: '讀書計畫' },
+        'section-weekly':   { icon: '📊', label: '週報'     },
+        'section-calendar': { icon: '📆', label: '行事曆'   },
+    };
+    function toggleSection(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const willCollapse = !el.classList.contains('hidden');
+        el.classList.toggle('hidden', willCollapse);
+        localStorage.setItem('sec_' + id, willCollapse ? '1' : '0');
+        updateDock();
+    }
+    function updateDock() {
+        const dock = document.getElementById('section-dock');
+        dock.innerHTML = '';
+        let count = 0;
+        Object.entries(SECTION_META).forEach(([id, meta]) => {
+            const el = document.getElementById(id);
+            if (el && el.classList.contains('hidden')) {
+                count++;
+                const btn = document.createElement('button');
+                btn.title = meta.label;
+                btn.className = 'w-8 h-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-sm hover:bg-gray-50 transition active:scale-95';
+                btn.textContent = meta.icon;
+                btn.onclick = () => toggleSection(id);
+                dock.appendChild(btn);
+            }
+        });
+        dock.style.display = count > 0 ? 'flex' : 'none';
+    }
+
+    // ── 長期目標編輯 ─────────────────────────────────────────────
+    const MILESTONES_DATA = {{ data.milestones | tojson }};
+    let _editMilestoneKey = null;
+    function openEditMilestone(key) {
+        _editMilestoneKey = key;
+        const ml = MILESTONES_DATA[key];
+        if (!ml) return;
+        document.getElementById('edit-ml-name').value     = ml.name || '';
+        document.getElementById('edit-ml-deadline').value = ml.deadline || '';
+        document.getElementById('edit-ml-finished').value = ml.finished_chapters || 0;
+        document.getElementById('edit-ml-total').value    = ml.total_chapters || 1;
+        document.getElementById('edit-ml-hpc').value      = ml.hours_per_chapter || 3;
+        document.getElementById('edit-milestone-modal').classList.remove('hidden');
+    }
+    async function saveEditMilestone() {
+        if (!_editMilestoneKey) return;
+        const res = await apiFetch('/api/edit_milestone', {
+            key:              _editMilestoneKey,
+            name:             document.getElementById('edit-ml-name').value.trim(),
+            deadline:         document.getElementById('edit-ml-deadline').value,
+            finished_chapters:parseInt(document.getElementById('edit-ml-finished').value)||0,
+            total_chapters:   parseInt(document.getElementById('edit-ml-total').value)||1,
+            hours_per_chapter:parseFloat(document.getElementById('edit-ml-hpc').value)||3
+        });
+        if (!res) return;
+        document.getElementById('edit-milestone-modal').classList.add('hidden');
+        window.location.reload();
+    }
+
+    // ── 行事曆全天切換 ────────────────────────────────────────────
+    function toggleAllDayInput() {
+        const isAllDay = document.getElementById('task-all-day').checked;
+        document.getElementById('task-time-row').classList.toggle('hidden', isAllDay);
+    }
+
+    // ── 讀書計畫備註 ─────────────────────────────────────────────
+    function toggleStudyNote(subject) {
+        // 用 data-subject 找對應的備註區塊，不依賴科目名稱拼字串 id
+        const textarea = document.querySelector(`textarea[data-subject="${CSS.escape(subject)}"]`);
+        if (!textarea) return;
+        const el = textarea.closest('[data-study-note]');
+        if (el) el.classList.toggle('hidden');
+    }
+    async function saveInlineStudyNote(textarea) {
+        const subject = textarea.dataset.subject;
+        const notes   = textarea.value;
+        await fetch('/api/update_study_notes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subject, notes }) });
+    }
+
+    // ── 隨手記詳情 ───────────────────────────────────────────────
+    let _inboxDetailItem = null;
+    function openInboxDetail(item) {
+        _inboxDetailItem = item;
+        document.getElementById('inbox-detail-text').textContent = item;
+        document.getElementById('inbox-sched-date').value = TODAY;
+        // Reset sub-forms
+        ['inbox-sub-schedule','inbox-sub-deadline','inbox-sub-debt'].forEach(id => {
+            document.getElementById(id).classList.add('hidden');
+        });
+        document.getElementById('inbox-detail-modal').classList.remove('hidden');
+    }
+    function closeInboxDetail() {
+        document.getElementById('inbox-detail-modal').classList.add('hidden');
+        _inboxDetailItem = null;
+    }
+    function inboxToSchedule() {
+        document.getElementById('inbox-sub-schedule').classList.toggle('hidden');
+        document.getElementById('inbox-sub-deadline').classList.add('hidden');
+        document.getElementById('inbox-sub-debt').classList.add('hidden');
+    }
+    function inboxToStudy() {
+        if (!_inboxDetailItem) return;
+        openSubjectModal(Object.keys(STUDY_PLAN_DATA)[0] || '');
+        closeInboxDetail();
+    }
+    function inboxToDeadline() {
+        document.getElementById('inbox-sub-deadline').classList.toggle('hidden');
+        document.getElementById('inbox-sub-schedule').classList.add('hidden');
+        document.getElementById('inbox-sub-debt').classList.add('hidden');
+    }
+    function inboxToDebt() {
+        document.getElementById('inbox-sub-debt').classList.toggle('hidden');
+        document.getElementById('inbox-sub-schedule').classList.add('hidden');
+        document.getElementById('inbox-sub-deadline').classList.add('hidden');
+    }
+    async function confirmInboxSchedule() {
+        const date = document.getElementById('inbox-sched-date').value;
+        const time = document.getElementById('inbox-sched-time').value || '09:00';
+        if (!date || !_inboxDetailItem) return;
+        // 使用 atomic API：一次呼叫同時移除 inbox + 加入排程
+        const res = await apiFetch('/api/inbox_to_task', { item: _inboxDetailItem, date, time, duration: 60 });
+        if (!res) return;
+        closeInboxDetail(); window.location.reload();
+    }
+    async function confirmInboxDeadline() {
+        const date = document.getElementById('inbox-dl-date').value;
+        const note = document.getElementById('inbox-dl-note').value.trim();
+        if (!date || !_inboxDetailItem) return;
+        // 使用 atomic API：一次呼叫同時移除 inbox + 加入截止日
+        const res = await apiFetch('/api/inbox_to_deadline', { item: _inboxDetailItem, date, note });
+        if (!res) return;
+        closeInboxDetail(); window.location.reload();
+    }
+    async function confirmInboxDebt() {
+        const hours = parseFloat(document.getElementById('inbox-debt-hours').value) || 1;
+        if (!_inboxDetailItem || hours <= 0) return;
+        const res = await apiFetch('/api/triage', { item: _inboxDetailItem, action: 'debt', hours });
+        if (!res) return;
+        closeInboxDetail(); window.location.reload();
+    }
+    async function confirmInboxDelete() {
+        if (!_inboxDetailItem) return;
+        const res = await apiFetch('/api/triage', { item: _inboxDetailItem, action: 'delete' });
+        if (!res) return;
+        closeInboxDetail(); window.location.reload();
+    }
+
+    // ── Init ─────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        // Restore collapsed sections from localStorage
+        Object.keys(SECTION_META).forEach(id => {
+            if (localStorage.getItem('sec_' + id) === '1') {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            }
+        });
+        updateDock();
+
+        initCalendar();
+        renderWeeklyStrip();
+        renderColorPicker();
+        renderHabitHeatmap();
+        initTodaySwipes();
+        initInboxSwipes();
+        initDeadlineSwipes();
+        initDebtSwipes();
+        initStudySwipes();
+        document.getElementById('new-task-name').addEventListener('keydown', e => { if (e.key==='Enter') addTaskFromCal(); });
+        document.getElementById('new-subject-name').addEventListener('keydown', e => { if (e.key==='Enter') addSubject(); });
+        // Set study date default to today
+        const sdEl = document.getElementById('study-date-from');
+        if (sdEl) sdEl.value = TODAY;
+        // Init all-day input state
+        toggleAllDayInput();
+        // Sync end-time auto-update with start-time
+        document.getElementById('new-task-time').addEventListener('change', function() {
+            const [h, m] = this.value.split(':').map(Number);
+            const endH = String(h+1 >= 24 ? 23 : h+1).padStart(2,'0');
+            document.getElementById('new-task-end-time').value = `${endH}:${String(m).padStart(2,'0')}`;
+        });
+    });
+</script>
+<!-- Toast 通知容器 -->
+<div id="toast-container" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[999] flex flex-col gap-2 items-center pointer-events-none"></div>
+</body>
+</html>
