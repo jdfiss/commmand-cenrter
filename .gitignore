@@ -5,3 +5,4 @@ __pycache__/
 *.log
 data.json
 users.json
+deploy.py

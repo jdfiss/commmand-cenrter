@@ -567,5 +567,24 @@ def move_task():
         save_data(data, uid())
     return jsonify({'status': 'success'})
 
+@app.route('/api/save_fixed_schedule', methods=['POST'])
+def save_fixed_schedule():
+    fs = request.json.get('fixed_schedule', {})
+    data = load_data(uid())
+    data['fixed_schedule'] = fs
+    save_data(data, uid())
+    return jsonify({'status': 'success'})
+
+@app.route('/api/update_chapter_names', methods=['POST'])
+def update_chapter_names():
+    subject = request.json.get('subject')
+    names   = request.json.get('names', [])
+    data = load_data(uid())
+    if subject in data.get('study_plan', {}):
+        data['study_plan'][subject]['chapter_names'] = names
+        save_data(data, uid())
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
