@@ -70,8 +70,20 @@
         <button onclick="addToInbox()" class="px-4 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition active:scale-95 shadow-sm shrink-0">加入</button>
     </div>
 
+    <!-- Inbox toggle header -->
+    {% if data.inbox %}
+    <button id="inbox-toggle" onclick="toggleInboxList()"
+        class="w-full flex items-center justify-between px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 shadow-sm hover:bg-gray-50 transition active:scale-[0.99]">
+        <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
+            <span id="inbox-toggle-label">{{ data.inbox|length }} 項待辦</span>
+        </span>
+        <svg id="inbox-toggle-icon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    {% endif %}
+
     <!-- Inbox list -->
-    <ul id="inbox-list" class="space-y-1.5">
+    <ul id="inbox-list" class="space-y-1.5 hidden">
         {% for item in data.inbox %}
         <li class="inbox-item rounded-xl overflow-hidden" data-item="{{ item }}">
             <div class="swipe-content flex items-center gap-3 bg-white border border-gray-200 px-4 py-4 text-sm text-gray-700 shadow-sm min-h-[56px]">
@@ -260,21 +272,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Today Suggestion -->
-            {% if study_worst %}
-            {% set sw = study_plan[study_worst] %}
-            <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 flex items-center gap-3 border-l-4 border-l-violet-400">
-                <span class="text-base shrink-0">💡</span>
-                <div class="flex-1 min-w-0">
-                    <p class="text-xs font-semibold text-violet-700">今日建議優先讀</p>
-                    <p class="text-sm font-bold text-gray-900 truncate">{{ study_worst }}</p>
-                    <p class="text-[10px] text-gray-400 mt-0.5">剩 {{ sw.total - sw.finished }} 章 · 已完成 {{ sw.pct }}%</p>
-                </div>
-                <button onclick="openSubjectModal('{{ study_worst }}')"
-                    class="text-xs text-violet-600 hover:text-violet-800 border border-violet-200 hover:border-violet-400 px-2.5 py-1.5 rounded-lg transition active:scale-95 shrink-0">排入</button>
-            </div>
-            {% endif %}
 
             <!-- Deadline warnings (urgent only ≤7d) -->
             {% for dl in deadlines %}
@@ -784,6 +781,17 @@
     const TODAY            = "{{ current_date }}";
 
     // ── Inbox ────────────────────────────────────────────────────
+    function toggleInboxList(forceOpen) {
+        const list = document.getElementById('inbox-list');
+        const icon = document.getElementById('inbox-toggle-icon');
+        if (!list) return;
+        const isHidden = list.classList.contains('hidden');
+        const shouldOpen = forceOpen !== undefined ? forceOpen : isHidden;
+        list.classList.toggle('hidden', !shouldOpen);
+        if (icon) icon.style.transform = shouldOpen ? 'rotate(180deg)' : '';
+        localStorage.setItem('inbox_open', shouldOpen ? '1' : '0');
+    }
+
     async function addToInbox() {
         const input = document.getElementById('inbox-input');
         const item = input.value.trim();
@@ -1245,7 +1253,7 @@
 
     // ── Day Detail Panel ─────────────────────────────────────────
     const PANEL_DESKTOP = 'flex flex-col w-72 border-l border-gray-200 bg-white';
-    const PANEL_MOBILE  = 'flex flex-col fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 rounded-t-2xl shadow-2xl';
+    const PANEL_MOBILE  = 'flex flex-col fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 rounded-t-2xl shadow-2xl';
 
     function openDayPanel(dateStr) {
         selectedDate = dateStr;
@@ -1253,7 +1261,7 @@
         const panel = document.getElementById('day-panel');
         const isMobile = window.innerWidth < 1024;
         panel.className = isMobile ? PANEL_MOBILE : PANEL_DESKTOP;
-        if (isMobile) { panel.style.maxHeight='80vh'; panel.style.overflowY='auto'; document.getElementById('cal-backdrop').classList.remove('hidden'); }
+        if (isMobile) { panel.style.maxHeight='80vh'; panel.style.overflowY='auto'; panel.style.paddingBottom='env(safe-area-inset-bottom, 0px)'; document.getElementById('cal-backdrop').classList.remove('hidden'); }
         else { panel.style.maxHeight=''; panel.style.overflowY=''; }
         const d = new Date(dateStr+'T00:00:00');
         const WFULL = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
@@ -1745,7 +1753,6 @@
         'section-debt':     { icon: '⏳', label: '時間債'   },
         'section-habits':   { icon: '✅', label: '習慣'     },
         'section-study':    { icon: '📖', label: '讀書計畫' },
-        'section-weekly':   { icon: '📊', label: '週報'     },
         'section-calendar': { icon: '📆', label: '行事曆'   },
     };
     function toggleSection(id) {
@@ -2138,10 +2145,6 @@
     <button onclick="jumpSection('section-habits')"   class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
         <span class="text-lg leading-none">✅</span>
         <span class="text-[10px] font-medium">習慣</span>
-    </button>
-    <button onclick="jumpSection('section-weekly')"   class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
-        <span class="text-lg leading-none">📊</span>
-        <span class="text-[10px] font-medium">週報</span>
     </button>
     <button onclick="jumpSection('section-calendar')" class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
         <span class="text-lg leading-none">📆</span>
