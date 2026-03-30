@@ -107,7 +107,7 @@
 
 
     <!-- ═══ Calendar ═══ -->
-    <div id="section-calendar" class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+    <div id="section-calendar" class="bg-white border-y sm:border border-gray-200 sm:rounded-2xl shadow-sm overflow-hidden -mx-4 sm:mx-0">
         <!-- Calendar header -->
         <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
             <div class="flex items-center gap-3">
@@ -133,7 +133,7 @@
 
         <div class="flex">
             <!-- Calendar grid -->
-            <div class="flex-1 p-3 sm:p-4">
+            <div class="flex-1 p-2 sm:p-3">
                 <div class="grid grid-cols-7 mb-1">
                     <div class="text-center text-xs font-semibold text-red-400 py-1">日</div>
                     <div class="text-center text-xs font-semibold text-gray-400 py-1">一</div>
@@ -1174,7 +1174,7 @@
 
             const cell = document.createElement('div');
             cell.className = [
-                'cal-cell relative min-h-[110px] sm:min-h-[140px] p-1 sm:p-1.5 cursor-pointer transition-colors overflow-hidden',
+                'cal-cell relative min-h-[100px] sm:min-h-[130px] p-0.5 sm:p-1 cursor-pointer transition-colors overflow-hidden',
                 !isCurrent ? 'bg-gray-50' :
                 isSelected  ? 'bg-gray-100' :
                 isToday     ? 'bg-blue-50' :
@@ -1185,7 +1185,7 @@
             // Day number
             const badge = document.createElement('div');
             badge.className = [
-                'w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full text-sm font-bold mb-0.5 transition-colors',
+                'w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-xs sm:text-sm font-bold mb-0.5 transition-colors',
                 isToday ? 'bg-blue-600 text-white'
                         : !isCurrent ? 'text-gray-300'
                         : isSun ? 'text-red-400'
@@ -1215,7 +1215,7 @@
             if (showPills) tasks.slice(0, 3).forEach(t => {
                 const [bg, fg] = t.completed ? ['bg-gray-100','text-gray-400'] : getEventStyle(t.task, t.color);
                 const pill = document.createElement('div');
-                pill.className = `text-[11px] leading-snug rounded-sm px-1.5 py-0.5 mb-0.5 truncate font-medium ${bg} ${fg} ${t.completed ? 'line-through opacity-40' : ''}`;
+                pill.className = `text-[10px] leading-snug rounded-sm px-1 py-0.5 mb-0.5 truncate font-medium ${bg} ${fg} ${t.completed ? 'line-through opacity-40' : ''}`;
                 pill.textContent = (t.time && t.time !== '00:00') ? `${t.time} ${t.task}` : t.task;
                 cell.appendChild(pill);
             });
