@@ -118,8 +118,6 @@ def dashboard():
     dow_names = ['日','一','二','三','四','五','六']
     today_dow = dow_names[(today_obj.weekday() + 1) % 7]
 
-    # 心情
-    mood_today = data.get('mood_logs', {}).get(current_date, {'emoji': '', 'note': ''})
 
     # 番茄鐘
     pomodoro_logs = data.get('pomodoro_logs', {})
@@ -127,8 +125,7 @@ def dashboard():
     pomodoro_week  = sum(pomodoro_logs.get(
         (today_obj - timedelta(days=i)).strftime('%Y-%m-%d'), 0) for i in range(7))
 
-    # 水分/睡眠
-    health_today = data.get('health_logs', {}).get(current_date, {'water': 0, 'sleep': 0})
+
 
     # 週報 (7天)
     week_stats = []
@@ -162,9 +159,9 @@ def dashboard():
                            current_time=current_time, milestones=milestones_display,
                            habit_defs=habit_defs, habit_today=habit_today,
                            habit_streaks=habit_streaks, suggestions=suggestions,
-                           mood_today=mood_today,
+
                            pomodoro_today=pomodoro_today, pomodoro_week=pomodoro_week,
-                           health_today=health_today, week_stats=week_stats,
+                           week_stats=week_stats,
                            study_worst=study_worst,
                            users=load_users(), current_user=current_user_info())
 
