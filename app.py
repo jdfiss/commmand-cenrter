@@ -506,6 +506,21 @@ def rename_habit():
     save_data(data, uid())
     return jsonify({'status': 'success'})
 
+@app.route('/api/edit_study_total', methods=['POST'])
+def edit_study_total():
+    req = request.json
+    subject, total = req.get('subject'), int(req.get('total', 1))
+    if total < 1:
+        return jsonify({'status': 'error'}), 400
+    data = load_data(uid())
+    if subject in data.get('study_plan', {}):
+        prog = data['study_plan'][subject]
+        prog['total'] = total
+        prog['finished'] = min(prog['finished'], total)
+        save_data(data, uid())
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
+
 @app.route('/api/set_study_finished', methods=['POST'])
 def set_study_finished():
     req = request.json

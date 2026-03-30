@@ -352,7 +352,11 @@
                     </div>
                     <div class="flex items-center gap-1.5">
                         <button onclick="updateChapter('{{ subject }}', -1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-500 text-xs font-bold transition active:scale-90">−</button>
-                        <span onclick="editFinished('{{ subject }}', {{ prog.finished }}, {{ prog.total }})" class="text-xs font-mono text-gray-700 w-14 text-center bg-gray-100 rounded px-1.5 py-0.5 cursor-pointer hover:bg-gray-200 transition" title="點擊直接設定">{{ prog.finished }}/{{ prog.total }}</span>
+                        <span class="text-xs font-mono text-gray-700 w-14 text-center bg-gray-100 rounded px-1.5 py-0.5 flex gap-0.5 items-center justify-center">
+                            <span onclick="editFinished('{{ subject }}', {{ prog.finished }}, {{ prog.total }})" class="cursor-pointer hover:text-blue-600 transition" title="改已完成章數">{{ prog.finished }}</span>
+                            <span class="text-gray-400">/</span>
+                            <span onclick="editTotal('{{ subject }}', {{ prog.total }})" class="cursor-pointer hover:text-blue-600 transition" title="改總章數">{{ prog.total }}</span>
+                        </span>
                         <button onclick="updateChapter('{{ subject }}', 1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-emerald-100 hover:text-emerald-600 text-gray-500 text-xs font-bold transition active:scale-90">＋</button>
                     </div>
                 </div>
@@ -1608,6 +1612,16 @@
             ]);
         });
     }
+    async function editTotal(subject, current) {
+        const input = prompt(`「${subject}」總章數？`, current);
+        if (input === null) return;
+        const total = parseInt(input);
+        if (isNaN(total) || total < 1) return alert('請輸入大於 0 的數字');
+        const res = await apiFetch('/api/edit_study_total', { subject, total });
+        if (!res) return;
+        window.location.reload();
+    }
+
     async function editFinished(subject, current, total) {
         const remaining = total - current;
         const input = prompt(`「${subject}」剩下幾章？（共 ${total} 章）`, remaining);
