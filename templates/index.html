@@ -87,13 +87,85 @@
 
     <!-- ═══ Mobile Section Nav ═══ -->
     <div class="lg:hidden flex gap-2 nav-scroll overflow-x-auto pb-1">
+        <button onclick="jumpSection('section-calendar')" class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📆 行事曆</button>
         <button onclick="jumpSection('section-today')"   class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📅 今日</button>
         <button onclick="jumpSection('section-study')"   class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📖 讀書</button>
         <button onclick="jumpSection('section-habits')"  class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">✅ 習慣</button>
-        <button onclick="jumpSection('section-weekly')"  class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📊 週報</button>
-        <button onclick="jumpSection('section-calendar')" class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📆 行事曆</button>
     </div>
 
+
+    <!-- ═══ Calendar ═══ -->
+    <div id="section-calendar" class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <!-- Calendar header -->
+        <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+                <span onclick="toggleSection('section-calendar')" class="text-base font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">行事曆</span>
+                <div class="flex items-center gap-1">
+                <button onclick="prevMonth()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition active:scale-90">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <span id="cal-month-label" class="text-base font-bold text-gray-900 w-32 text-center select-none"></span>
+                <button onclick="nextMonth()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition active:scale-90">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                </button>
+                </div>
+            </div>
+            <!-- Weekly mini strip -->
+            <div id="weekly-strip" class="hidden sm:flex items-center gap-0.5"></div>
+            <button id="cal-hide-btn" onclick="toggleCalEvents()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">隱藏事項</button>
+            <button onclick="goToday()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">今天</button>
+        </div>
+
+        <!-- Mobile backdrop -->
+        <div id="cal-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm" onclick="closeDayPanel()"></div>
+
+        <div class="flex">
+            <!-- Calendar grid -->
+            <div class="flex-1 p-3 sm:p-4">
+                <div class="grid grid-cols-7 mb-1">
+                    <div class="text-center text-xs font-semibold text-red-400 py-1">日</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">一</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">二</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">三</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">四</div>
+                    <div class="text-center text-xs font-semibold text-gray-400 py-1">五</div>
+                    <div class="text-center text-xs font-semibold text-sky-400 py-1">六</div>
+                </div>
+                <div id="cal-grid" class="grid grid-cols-7"></div>
+            </div>
+
+            <!-- Day detail panel -->
+            <div id="day-panel" class="hidden">
+                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-white">
+                    <div>
+                        <h3 id="panel-date" class="font-bold text-gray-900 text-base leading-tight"></h3>
+                        <p id="panel-date-sub" class="text-xs text-gray-400 mt-0.5"></p>
+                    </div>
+                    <button onclick="closeDayPanel()" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div id="panel-tasks" class="flex-1 overflow-y-auto px-3 py-3 bg-white"></div>
+                <div class="px-3 py-3 border-t border-gray-100 bg-gray-50">
+                    <input id="new-task-name" type="text" placeholder="＋ 新增任務…"
+                        class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2 transition placeholder:text-gray-400"/>
+                    <!-- 全天 toggle -->
+                    <label class="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                        <input type="checkbox" id="task-all-day" onchange="toggleAllDayInput()" class="rounded accent-gray-900"/>
+                        <span class="text-xs text-gray-600 font-medium">全天</span>
+                    </label>
+                    <!-- 時間欄位 (隱藏時為全天) -->
+                    <div id="task-time-row" class="flex gap-2 mb-2 items-center">
+                        <input id="new-task-time" type="time" value="09:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                        <span class="text-xs text-gray-400 shrink-0">到</span>
+                        <input id="new-task-end-time" type="time" value="10:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                    </div>
+                    <div id="task-color-picker" class="flex gap-2 mb-2 flex-wrap"></div>
+                    <button onclick="addTaskFromCal()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition active:scale-95">加入排程</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ═══ Main Grid ═══ -->
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -312,35 +384,6 @@
             {% endif %}
 
             <!-- Habit tracking -->
-            <div id="section-habits" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <h2 onclick="toggleSection('section-habits')" class="text-sm font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">習慣追蹤</h2>
-                    <span class="text-xs font-mono text-gray-400" id="habit-count">{{ habit_today|length }}/{{ habit_defs|length }}</span>
-                </div>
-                <div class="space-y-1" id="habit-grid">
-                    {% for habit in habit_defs %}
-                    {% set done = habit in habit_today %}
-                    <div data-swipe-habit data-habit="{{ habit }}" data-idx="{{ loop.index0 }}" class="rounded-lg overflow-hidden">
-                    <button id="habit-{{ loop.index0 }}" onclick="toggleHabit('{{ habit }}', {{ loop.index0 }})"
-                        class="swipe-content w-full flex items-center gap-3 py-2 rounded-lg transition active:scale-[0.99] text-left hover:bg-gray-50 px-2">
-                        <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition
-                            {% if done %}bg-gray-900 border-gray-900{% else %}border-gray-300{% endif %}">
-                            {% if done %}<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>{% endif %}
-                        </div>
-                        <span class="text-sm flex-1 {% if done %}line-through text-gray-400{% else %}text-gray-700{% endif %}">{{ habit }}</span>
-                        {% if habit_streaks[habit] > 0 %}<span class="text-xs text-orange-500 shrink-0">🔥{{ habit_streaks[habit] }}</span>{% endif %}
-                    </button>
-                    </div>
-                    {% endfor %}
-                </div>
-                <!-- 本週熱力列 -->
-                <div class="mt-3 pt-3 border-t border-gray-100">
-                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">本週習慣</p>
-                    <div id="habit-heatmap" class="flex gap-1"></div>
-                </div>
-            </div>
-
-
         </aside>
     </div><!-- end main grid -->
 
@@ -411,123 +454,38 @@
         </div>
     </div>
 
-    <!-- ═══ Weekly Report ═══ -->
-    <div id="section-weekly" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
-        <h2 onclick="toggleSection('section-weekly')" class="text-base font-bold text-gray-900 mb-4 cursor-pointer hover:text-gray-500 transition select-none">本週週報</h2>
-        <div class="grid grid-cols-7 gap-1.5" id="week-report-grid">
-            {% for ws in week_stats %}
-            {% set task_pct = (ws.task_done / ws.task_total * 100)|round|int if ws.task_total > 0 else 0 %}
-            {% set habit_pct = (ws.habit_done / ws.habit_total * 100)|round|int if ws.habit_total > 0 else 0 %}
-            {% set d = ws.date %}
-            <div class="flex flex-col items-center gap-1">
-                <span class="text-[9px] text-gray-400 font-medium">{{ d[8:] }}</span>
-                <!-- task bar -->
-                <div class="w-full h-16 bg-gray-50 rounded-lg border border-gray-100 flex flex-col justify-end overflow-hidden relative">
-                    <div class="w-full transition-all duration-700 {% if task_pct == 100 %}bg-emerald-400{% elif task_pct > 0 %}bg-blue-300{% else %}bg-transparent{% endif %}"
-                        style="height:{{ task_pct }}%"></div>
-                    {% if ws.pomo > 0 %}
-                    <span class="absolute top-1 left-0 right-0 text-center text-[9px] text-orange-500">🍅{{ ws.pomo }}</span>
-                    {% endif %}
+    <!-- ═══ Habits ═══ -->
+    <div id="section-habits" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 onclick="toggleSection('section-habits')" class="text-sm font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">習慣追蹤</h2>
+            <span class="text-xs font-mono text-gray-400" id="habit-count">{{ habit_today|length }}/{{ habit_defs|length }}</span>
+        </div>
+        <div class="space-y-1" id="habit-grid">
+            {% for habit in habit_defs %}
+            {% set done = habit in habit_today %}
+            <div data-swipe-habit data-habit="{{ habit }}" data-idx="{{ loop.index0 }}" class="rounded-lg overflow-hidden">
+            <button id="habit-{{ loop.index0 }}" onclick="toggleHabit('{{ habit }}', {{ loop.index0 }})"
+                class="swipe-content w-full flex items-center gap-3 py-2 rounded-lg transition active:scale-[0.99] text-left hover:bg-gray-50 px-2">
+                <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition
+                    {% if done %}bg-gray-900 border-gray-900{% else %}border-gray-300{% endif %}">
+                    {% if done %}<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>{% endif %}
                 </div>
-                <!-- habit dots -->
-                <div class="flex gap-0.5">
-                    {% for i in range(ws.habit_total) %}
-                    <div class="w-1.5 h-1.5 rounded-full {% if i < ws.habit_done %}bg-gray-700{% else %}bg-gray-100{% endif %}"></div>
-                    {% endfor %}
-                </div>
-                <span class="text-[9px] font-mono text-gray-400">
-                    {% if ws.task_total > 0 %}{{ task_pct }}%{% else %}—{% endif %}
-                </span>
+                <span class="text-sm flex-1 {% if done %}line-through text-gray-400{% else %}text-gray-700{% endif %}">{{ habit }}</span>
+                {% if habit_streaks[habit] > 0 %}<span class="text-xs text-orange-500 shrink-0">🔥{{ habit_streaks[habit] }}</span>{% endif %}
+            </button>
             </div>
             {% endfor %}
         </div>
-        <div class="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-xs text-gray-400">
-            {% set total_tasks = week_stats | sum(attribute='task_total') %}
-            {% set done_tasks  = week_stats | sum(attribute='task_done') %}
-            {% set total_pomo  = week_stats | sum(attribute='pomo') %}
-            <span>任務完成率 <strong class="text-gray-700 font-mono">{% if total_tasks > 0 %}{{ (done_tasks/total_tasks*100)|round|int }}%{% else %}—{% endif %}</strong></span>
-            <span>番茄鐘 <strong class="text-gray-700 font-mono">{{ total_pomo }} 🍅</strong></span>
+        <div class="mt-3 pt-3 border-t border-gray-100">
+            <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">本週習慣</p>
+            <div id="habit-heatmap" class="flex gap-1"></div>
         </div>
     </div>
-
-    <!-- ═══ Calendar ═══ -->
-    <div id="section-calendar" class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <!-- Calendar header -->
-        <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-            <div class="flex items-center gap-3">
-                <span onclick="toggleSection('section-calendar')" class="text-base font-bold text-gray-900 cursor-pointer hover:text-gray-500 transition select-none">行事曆</span>
-                <div class="flex items-center gap-1">
-                <button onclick="prevMonth()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition active:scale-90">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
-                </button>
-                <span id="cal-month-label" class="text-base font-bold text-gray-900 w-32 text-center select-none"></span>
-                <button onclick="nextMonth()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition active:scale-90">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
-                </button>
-                </div>
-            </div>
-            <!-- Weekly mini strip -->
-            <div id="weekly-strip" class="hidden sm:flex items-center gap-0.5"></div>
-            <button id="cal-hide-btn" onclick="toggleCalEvents()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">隱藏事項</button>
-            <button onclick="goToday()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">今天</button>
-        </div>
-
-        <!-- Mobile backdrop -->
-        <div id="cal-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm" onclick="closeDayPanel()"></div>
-
-        <div class="flex">
-            <!-- Calendar grid -->
-            <div class="flex-1 p-3 sm:p-4">
-                <div class="grid grid-cols-7 mb-1">
-                    <div class="text-center text-xs font-semibold text-red-400 py-1">日</div>
-                    <div class="text-center text-xs font-semibold text-gray-400 py-1">一</div>
-                    <div class="text-center text-xs font-semibold text-gray-400 py-1">二</div>
-                    <div class="text-center text-xs font-semibold text-gray-400 py-1">三</div>
-                    <div class="text-center text-xs font-semibold text-gray-400 py-1">四</div>
-                    <div class="text-center text-xs font-semibold text-gray-400 py-1">五</div>
-                    <div class="text-center text-xs font-semibold text-sky-400 py-1">六</div>
-                </div>
-                <div id="cal-grid" class="grid grid-cols-7"></div>
-            </div>
-
-            <!-- Day detail panel -->
-            <div id="day-panel" class="hidden">
-                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-white">
-                    <div>
-                        <h3 id="panel-date" class="font-bold text-gray-900 text-base leading-tight"></h3>
-                        <p id="panel-date-sub" class="text-xs text-gray-400 mt-0.5"></p>
-                    </div>
-                    <button onclick="closeDayPanel()" class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-                <div id="panel-tasks" class="flex-1 overflow-y-auto px-3 py-3 bg-white"></div>
-                <div class="px-3 py-3 border-t border-gray-100 bg-gray-50">
-                    <input id="new-task-name" type="text" placeholder="＋ 新增任務…"
-                        class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2 transition placeholder:text-gray-400"/>
-                    <!-- 全天 toggle -->
-                    <label class="flex items-center gap-2 mb-2 cursor-pointer select-none">
-                        <input type="checkbox" id="task-all-day" onchange="toggleAllDayInput()" class="rounded accent-gray-900"/>
-                        <span class="text-xs text-gray-600 font-medium">全天</span>
-                    </label>
-                    <!-- 時間欄位 (隱藏時為全天) -->
-                    <div id="task-time-row" class="flex gap-2 mb-2 items-center">
-                        <input id="new-task-time" type="time" value="09:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
-                        <span class="text-xs text-gray-400 shrink-0">到</span>
-                        <input id="new-task-end-time" type="time" value="10:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
-                    </div>
-                    <div id="task-color-picker" class="flex gap-2 mb-2 flex-wrap"></div>
-                    <button onclick="addTaskFromCal()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition active:scale-95">加入排程</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
 </div><!-- end max-w container -->
 
 <!-- ═══ User Picker ═══ -->
-<div id="user-picker" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="closeUserPicker(event)">
-    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm shadow-2xl p-5" onclick="event.stopPropagation()">
+<div id="user-picker" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onclick="closeUserPicker(event)">
+    <div class="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-sm shadow-2xl p-5" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-bold text-gray-900">切換使用者</h3>
             <button onclick="closeUserPicker()" class="text-gray-400 hover:text-gray-700 transition w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
@@ -564,8 +522,8 @@
 </div>
 
 <!-- ═══ Subject Modal ═══ -->
-<div id="subject-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-6" onclick="closeSubjectModal(event)">
-    <div class="bg-white rounded-t-2xl sm:rounded-2xl border border-gray-200 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+<div id="subject-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onclick="closeSubjectModal(event)">
+    <div class="bg-white rounded-2xl border border-gray-200 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <div>
                 <h2 id="modal-title" class="text-xl font-bold text-gray-900"></h2>
@@ -630,8 +588,8 @@
 </div>
 
 <!-- ═══ Edit Task Modal ═══ -->
-<div id="edit-task-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
+<div id="edit-task-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-bold text-gray-900">編輯任務</h3>
             <button onclick="document.getElementById('edit-task-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
@@ -646,8 +604,8 @@
 </div>
 
 <!-- ═══ Edit Deadline Modal ═══ -->
-<div id="edit-deadline-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
+<div id="edit-deadline-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-bold text-gray-900">編輯截止日</h3>
             <button onclick="document.getElementById('edit-deadline-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
@@ -660,8 +618,8 @@
 </div>
 
 <!-- ═══ Rename Habit Modal ═══ -->
-<div id="rename-habit-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
+<div id="rename-habit-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-bold text-gray-900">更改習慣名稱</h3>
             <button onclick="document.getElementById('rename-habit-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
@@ -672,8 +630,8 @@
 </div>
 
 <!-- ═══ Edit Milestone Modal ═══ -->
-<div id="edit-milestone-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 shadow-2xl" onclick="event.stopPropagation()">
+<div id="edit-milestone-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-md p-5 shadow-2xl" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-bold text-gray-900">編輯長期目標</h3>
             <button onclick="document.getElementById('edit-milestone-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
@@ -704,8 +662,8 @@
 </div>
 
 <!-- ═══ Inbox Detail Modal ═══ -->
-<div id="inbox-detail-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeInboxDetail()">
-    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl" onclick="event.stopPropagation()">
+<div id="inbox-detail-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)closeInboxDetail()">
+    <div class="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-md shadow-2xl" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h3 class="text-base font-bold text-gray-900">隨手記詳情</h3>
             <button onclick="closeInboxDetail()" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
@@ -2140,8 +2098,8 @@
     }
 </script>
 <!-- ═══ Fixed Schedule Modal ═══ -->
-<div id="fixed-schedule-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-6" onclick="if(event.target===this)closeFSModal()">
-    <div class="bg-white rounded-t-2xl sm:rounded-2xl border border-gray-200 w-full sm:max-w-lg shadow-2xl max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+<div id="fixed-schedule-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closeFSModal()">
+    <div class="bg-white rounded-2xl border border-gray-200 w-full sm:max-w-lg shadow-2xl max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
             <h2 class="text-base font-bold text-gray-900">固定課表管理</h2>
             <button onclick="closeFSModal()" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
