@@ -476,6 +476,48 @@ def toggle_habit():
     save_data(data, uid())
     return jsonify({"status": "success", "done": habit in day})
 
+@app.route('/api/delete_habit', methods=['POST'])
+def delete_habit():
+    name = request.json.get('name')
+    data = load_data(uid())
+    if name in data.get('habit_defs', []):
+        data['habit_defs'].remove(name)
+        for day in data.get('habit_logs', {}).values():
+            if name in day: day.remove(name)
+        save_data(data, uid())
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
+
+@app.route('/api/rename_habit', methods=['POST'])
+def rename_habit():
+    old = request.json.get('old')
+    new = request.json.get('new', '').strip()
+    if not new:
+        return jsonify({'status': 'error'}), 400
+    data = load_data(uid())
+    defs = data.get('habit_defs', [])
+    if old not in defs:
+        return jsonify({'status': 'error'}), 400
+    idx = defs.index(old)
+    defs[idx] = new
+    for day in data.get('habit_logs', {}).values():
+        if old in day:
+            day[day.index(old)] = new
+    save_data(data, uid())
+    return jsonify({'status': 'success'})
+
+@app.route('/api/set_study_finished', methods=['POST'])
+def set_study_finished():
+    req = request.json
+    subject, finished = req.get('subject'), int(req.get('finished', 0))
+    data = load_data(uid())
+    if subject in data.get('study_plan', {}):
+        prog = data['study_plan'][subject]
+        prog['finished'] = max(0, min(finished, prog['total']))
+        save_data(data, uid())
+        return jsonify({'status': 'success', 'finished': prog['finished']})
+    return jsonify({'status': 'error'}), 400
+
 # ── 心情 / 番茄鐘 / 健康 API ──────────────────────────────────
 
 @app.route('/api/save_mood', methods=['POST'])

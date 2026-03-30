@@ -299,8 +299,9 @@
                 <div class="space-y-1" id="habit-grid">
                     {% for habit in habit_defs %}
                     {% set done = habit in habit_today %}
+                    <div data-swipe-habit data-habit="{{ habit }}" data-idx="{{ loop.index0 }}" class="rounded-lg overflow-hidden">
                     <button id="habit-{{ loop.index0 }}" onclick="toggleHabit('{{ habit }}', {{ loop.index0 }})"
-                        class="w-full flex items-center gap-3 py-2 rounded-lg transition active:scale-[0.99] text-left hover:bg-gray-50 px-2">
+                        class="swipe-content w-full flex items-center gap-3 py-2 rounded-lg transition active:scale-[0.99] text-left hover:bg-gray-50 px-2">
                         <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition
                             {% if done %}bg-gray-900 border-gray-900{% else %}border-gray-300{% endif %}">
                             {% if done %}<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>{% endif %}
@@ -308,6 +309,7 @@
                         <span class="text-sm flex-1 {% if done %}line-through text-gray-400{% else %}text-gray-700{% endif %}">{{ habit }}</span>
                         {% if habit_streaks[habit] > 0 %}<span class="text-xs text-orange-500 shrink-0">🔥{{ habit_streaks[habit] }}</span>{% endif %}
                     </button>
+                    </div>
                     {% endfor %}
                 </div>
                 <!-- 本週熱力列 -->
@@ -350,7 +352,7 @@
                     </div>
                     <div class="flex items-center gap-1.5">
                         <button onclick="updateChapter('{{ subject }}', -1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-500 text-xs font-bold transition active:scale-90">−</button>
-                        <span class="text-xs font-mono text-gray-700 w-14 text-center bg-gray-100 rounded px-1.5 py-0.5">{{ prog.finished }}/{{ prog.total }}</span>
+                        <span onclick="editFinished('{{ subject }}', {{ prog.finished }}, {{ prog.total }})" class="text-xs font-mono text-gray-700 w-14 text-center bg-gray-100 rounded px-1.5 py-0.5 cursor-pointer hover:bg-gray-200 transition" title="點擊直接設定">{{ prog.finished }}/{{ prog.total }}</span>
                         <button onclick="updateChapter('{{ subject }}', 1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-emerald-100 hover:text-emerald-600 text-gray-500 text-xs font-bold transition active:scale-90">＋</button>
                     </div>
                 </div>
@@ -409,7 +411,7 @@
                     {% endfor %}
                 </div>
                 <span class="text-[9px] font-mono text-gray-400">
-                    {% if ws.task_total > 0 %}{{ ws.task_done }}/{{ ws.task_total }}{% else %}—{% endif %}
+                    {% if ws.task_total > 0 %}{{ task_pct }}%{% else %}—{% endif %}
                 </span>
             </div>
             {% endfor %}
@@ -441,6 +443,7 @@
             </div>
             <!-- Weekly mini strip -->
             <div id="weekly-strip" class="hidden sm:flex items-center gap-0.5"></div>
+            <button id="cal-hide-btn" onclick="toggleCalEvents()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">隱藏事項</button>
             <button onclick="goToday()" class="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">今天</button>
         </div>
 
@@ -628,6 +631,18 @@
         <input id="edit-dl-date" type="date" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
         <input id="edit-dl-note" type="text" placeholder="備註" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-4"/>
         <button onclick="saveEditDeadline()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-semibold transition active:scale-95">儲存</button>
+    </div>
+</div>
+
+<!-- ═══ Rename Habit Modal ═══ -->
+<div id="rename-habit-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white border border-gray-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 shadow-2xl" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-gray-900">更改習慣名稱</h3>
+            <button onclick="document.getElementById('rename-habit-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+        <input id="rename-habit-input" type="text" placeholder="新名稱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-3"/>
+        <button onclick="saveRenameHabit()" class="w-full py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold text-sm transition active:scale-95">儲存</button>
     </div>
 </div>
 
@@ -1167,7 +1182,7 @@
 
             const cell = document.createElement('div');
             cell.className = [
-                'cal-cell relative min-h-[90px] sm:min-h-[120px] p-1 sm:p-1.5 cursor-pointer transition-colors overflow-hidden',
+                'cal-cell relative min-h-[110px] sm:min-h-[140px] p-1 sm:p-1.5 cursor-pointer transition-colors overflow-hidden',
                 !isCurrent ? 'bg-gray-50' :
                 isSelected  ? 'bg-gray-100' :
                 isToday     ? 'bg-blue-50' :
@@ -1197,15 +1212,22 @@
                 cell.appendChild(dlBar);
             }
 
-            // Task pills (max 3)
-            tasks.slice(0, 3).forEach(t => {
+            // Task pills (max 3) — hidden when calEventsHidden unless deadline within 2 days
+            const showPills = !calEventsHidden || isDeadlineWithin2Days(dateStr);
+            if (!showPills && tasks.length > 0) {
+                const cnt = document.createElement('div');
+                cnt.className = 'text-[10px] text-gray-400 pl-1 font-medium';
+                cnt.textContent = `${tasks.length} 項`;
+                cell.appendChild(cnt);
+            }
+            if (showPills) tasks.slice(0, 3).forEach(t => {
                 const [bg, fg] = t.completed ? ['bg-gray-100','text-gray-400'] : getEventStyle(t.task, t.color);
                 const pill = document.createElement('div');
                 pill.className = `text-[11px] leading-snug rounded-sm px-1.5 py-0.5 mb-0.5 truncate font-medium ${bg} ${fg} ${t.completed ? 'line-through opacity-40' : ''}`;
                 pill.textContent = (t.time && t.time !== '00:00') ? `${t.time} ${t.task}` : t.task;
                 cell.appendChild(pill);
             });
-            if (tasks.length > 3) {
+            if (showPills && tasks.length > 3) {
                 const more = document.createElement('div');
                 more.className = 'text-[10px] text-gray-400 pl-1 mt-0.5 font-medium';
                 more.textContent = `+${tasks.length-3} 個`;
@@ -1214,6 +1236,19 @@
 
             grid.appendChild(cell);
         }
+    }
+
+    let calEventsHidden = false;
+    function toggleCalEvents() {
+        calEventsHidden = !calEventsHidden;
+        document.getElementById('cal-hide-btn').textContent = calEventsHidden ? '顯示事項' : '隱藏事項';
+        renderCalendar();
+    }
+    function isDeadlineWithin2Days(dateStr) {
+        return DEADLINES_CAL.some(dl => {
+            const diff = (new Date(dl.date+'T00:00:00') - new Date(dateStr+'T00:00:00')) / 86400000;
+            return diff >= 0 && diff <= 2;
+        });
     }
 
     function prevMonth() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
@@ -1531,6 +1566,37 @@
         if (!res) return;
         window.location.reload();
     }
+    function initHabitSwipes() {
+        document.querySelectorAll('[data-swipe-habit]').forEach(wrap => {
+            const habit = wrap.dataset.habit;
+            const cEl = wrap.querySelector('.swipe-content');
+            if (!cEl) return;
+            initSwipe(cEl, [
+                { label:'改名', bg:'#0891b2', fn: () => openRenameHabit(habit) },
+                { label:'刪除', bg:'#ef4444', fn: () => { if(confirm(`刪除習慣「${habit}」？`)) deleteHabit(habit); } }
+            ]);
+        });
+    }
+    async function deleteHabit(name) {
+        const res = await apiFetch('/api/delete_habit', { name });
+        if (!res) return;
+        window.location.reload();
+    }
+    let _renameHabitOld = null;
+    function openRenameHabit(name) {
+        _renameHabitOld = name;
+        document.getElementById('rename-habit-input').value = name;
+        document.getElementById('rename-habit-modal').classList.remove('hidden');
+    }
+    async function saveRenameHabit() {
+        const newName = document.getElementById('rename-habit-input').value.trim();
+        if (!newName || !_renameHabitOld) return;
+        const res = await apiFetch('/api/rename_habit', { old: _renameHabitOld, new: newName });
+        if (!res) return;
+        document.getElementById('rename-habit-modal').classList.add('hidden');
+        window.location.reload();
+    }
+
     function initStudySwipes() {
         document.querySelectorAll('[data-swipe-study]').forEach(wrap => {
             const subject = wrap.dataset.subject;
@@ -1542,6 +1608,18 @@
             ]);
         });
     }
+    async function editFinished(subject, current, total) {
+        const remaining = total - current;
+        const input = prompt(`「${subject}」剩下幾章？（共 ${total} 章）`, remaining);
+        if (input === null) return;
+        const rem = parseInt(input);
+        if (isNaN(rem) || rem < 0 || rem > total) return alert('請輸入 0 到 ' + total + ' 之間的數字');
+        const finished = total - rem;
+        const res = await apiFetch('/api/set_study_finished', { subject, finished });
+        if (!res) return;
+        window.location.reload();
+    }
+
     async function deleteSubject(name) {
         const res = await apiFetch('/api/delete_subject', { name });
         if (!res) return;
@@ -1967,6 +2045,7 @@
         initDeadlineSwipes();
         initDebtSwipes();
         initStudySwipes();
+        initHabitSwipes();
         document.getElementById('new-task-name').addEventListener('keydown', e => { if (e.key==='Enter') addTaskFromCal(); });
         document.getElementById('new-subject-name').addEventListener('keydown', e => { if (e.key==='Enter') addSubject(); });
         // Set study date default to today
