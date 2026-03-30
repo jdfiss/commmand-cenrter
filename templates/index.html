@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Command Center</title>
     <link rel="icon" href="/static/favicon.ico">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -215,6 +215,8 @@
                             <div class="flex items-center gap-2">
                                 <button onclick="openEditMilestone('{{ key }}')"
                                     class="text-[10px] text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-1.5 py-0.5 rounded transition active:scale-95">編輯</button>
+                                <button onclick="deleteMilestone('{{ key }}')"
+                                    class="text-[10px] text-red-400 hover:text-red-600 border border-gray-200 hover:border-red-300 px-1.5 py-0.5 rounded transition active:scale-95">刪除</button>
                                 <span class="text-xs font-mono {% if ml.days_left <= 90 %}text-red-500{% elif ml.days_left <= 180 %}text-amber-500{% else %}text-gray-400{% endif %}">{{ ml.days_left }}d</span>
                             </div>
                         </div>
@@ -564,6 +566,10 @@
                         class="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 font-medium transition">跨日</button>
                 </div>
             </div>
+            <label class="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                <input type="checkbox" id="study-all-day" onchange="toggleStudyAllDay()" class="rounded accent-gray-900"/>
+                <span class="text-xs text-gray-600 font-medium">全天</span>
+            </label>
             <div id="study-date-single" class="grid grid-cols-2 gap-2 mb-2">
                 <input id="study-date" type="date" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
                 <input id="study-time" type="time" value="09:00" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
@@ -964,9 +970,10 @@
     }
 
     async function scheduleStudy() {
-        const time    = document.getElementById('study-time').value;
+        const isAllDay = document.getElementById('study-all-day').checked;
+        const time    = isAllDay ? '00:00' : document.getElementById('study-time').value;
+        const dur     = isAllDay ? 1440 : (parseInt(document.getElementById('study-dur').value) || 120);
         const chapter = document.getElementById('study-chapter').value.trim();
-        const dur     = parseInt(document.getElementById('study-dur').value) || 120;
         if (!modalSubject) return;
 
         let dates = [];
@@ -1692,6 +1699,12 @@
         document.getElementById('edit-ml-hpc').value      = ml.hours_per_chapter || 3;
         document.getElementById('edit-milestone-modal').classList.remove('hidden');
     }
+    async function deleteMilestone(key) {
+        if (!confirm('確定刪除這個目標？')) return;
+        const res = await apiFetch('/api/delete_milestone', { key });
+        if (!res) return;
+        window.location.reload();
+    }
     async function saveEditMilestone() {
         if (!_editMilestoneKey) return;
         const res = await apiFetch('/api/edit_milestone', {
@@ -1705,6 +1718,12 @@
         if (!res) return;
         document.getElementById('edit-milestone-modal').classList.add('hidden');
         window.location.reload();
+    }
+
+    // ── 讀書計劃全天切換 ──────────────────────────────────────────
+    function toggleStudyAllDay() {
+        const isAllDay = document.getElementById('study-all-day').checked;
+        document.getElementById('study-time').classList.toggle('hidden', isAllDay);
     }
 
     // ── 行事曆全天切換 ────────────────────────────────────────────

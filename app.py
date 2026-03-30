@@ -529,6 +529,16 @@ def add_deadline():
     save_data(data, uid())
     return jsonify({'status': 'success'})
 
+@app.route('/api/delete_milestone', methods=['POST'])
+def delete_milestone():
+    key  = request.json.get('key')
+    data = load_data(uid())
+    if key in data.get('milestones', {}):
+        del data['milestones'][key]
+        save_data(data, uid())
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
+
 @app.route('/api/edit_milestone', methods=['POST'])
 def edit_milestone():
     req  = request.json
