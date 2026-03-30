@@ -20,6 +20,13 @@
         .swipe-content { touch-action: pan-y; }
         .cal-cell { border-right: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; }
         #cal-grid { border-left: 1px solid #f3f4f6; border-top: 1px solid #f3f4f6; }
+        /* 防止 iOS 輸入框自動放大 */
+        input, textarea, select { font-size: 16px; }
+        /* 區塊導覽列隱藏捲軸 */
+        .nav-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        .nav-scroll::-webkit-scrollbar { display: none; }
+        /* 底部 tab 留空 */
+        @media (max-width: 1023px) { body { padding-bottom: 64px; } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans antialiased">
@@ -75,8 +82,17 @@
         {% endfor %}
     </ul>
 
-    <!-- Section dock -->
+    <!-- Section dock (collapsed sections) -->
     <div id="section-dock" style="display:none" class="flex flex-wrap gap-1.5"></div>
+
+    <!-- ═══ Mobile Section Nav ═══ -->
+    <div class="lg:hidden flex gap-2 nav-scroll overflow-x-auto pb-1">
+        <button onclick="jumpSection('section-today')"   class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📅 今日</button>
+        <button onclick="jumpSection('section-study')"   class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📖 讀書</button>
+        <button onclick="jumpSection('section-habits')"  class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">✅ 習慣</button>
+        <button onclick="jumpSection('section-weekly')"  class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📊 週報</button>
+        <button onclick="jumpSection('section-calendar')" class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 shadow-sm active:scale-95 transition">📆 行事曆</button>
+    </div>
 
 
     <!-- ═══ Main Grid ═══ -->
@@ -1972,7 +1988,7 @@
                 <span class="font-mono text-xs text-gray-400 w-12 shrink-0">${item.time}</span>
                 <span class="flex-1 text-sm text-gray-800">${item.task}</span>
                 <span class="text-xs text-gray-400 shrink-0">${item.duration}m</span>
-                <button onclick="deleteFSItem(${idx})" class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-400 transition text-sm shrink-0">✕</button>`;
+                <button onclick="deleteFSItem(${idx})" class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 transition text-sm shrink-0 active:scale-90">✕</button>`;
             container.appendChild(el);
         });
     }
@@ -2098,6 +2114,30 @@
             document.getElementById('new-task-end-time').value = `${endH}:${String(m).padStart(2,'0')}`;
         });
     });
+
+    // ── 防止 iOS 縮放 ─────────────────────────────────────────────
+    document.addEventListener('gesturestart',  e => e.preventDefault(), { passive: false });
+    document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+    document.addEventListener('gestureend',    e => e.preventDefault(), { passive: false });
+    let _lastTouch = 0;
+    document.addEventListener('touchstart', e => {
+        if (e.touches.length > 1) e.preventDefault();
+        const now = Date.now();
+        if (now - _lastTouch < 300) e.preventDefault();
+        _lastTouch = now;
+    }, { passive: false });
+
+    // ── 區塊導覽 ─────────────────────────────────────────────────
+    function jumpSection(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.classList.contains('hidden')) {
+            el.classList.remove('hidden');
+            localStorage.setItem('sec_' + id, '0');
+            updateDock();
+        }
+        setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
 </script>
 <!-- ═══ Fixed Schedule Modal ═══ -->
 <div id="fixed-schedule-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-6" onclick="if(event.target===this)closeFSModal()">
@@ -2125,6 +2165,30 @@
 </div>
 
 <!-- Toast 通知容器 -->
-<div id="toast-container" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[999] flex flex-col gap-2 items-center pointer-events-none"></div>
+<div id="toast-container" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-[999] flex flex-col gap-2 items-center pointer-events-none lg:bottom-5"></div>
+
+<!-- ═══ Mobile Bottom Tab Bar ═══ -->
+<nav class="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 flex">
+    <button onclick="jumpSection('section-today')"    class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
+        <span class="text-lg leading-none">📅</span>
+        <span class="text-[10px] font-medium">今日</span>
+    </button>
+    <button onclick="jumpSection('section-study')"    class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
+        <span class="text-lg leading-none">📖</span>
+        <span class="text-[10px] font-medium">讀書</span>
+    </button>
+    <button onclick="jumpSection('section-habits')"   class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
+        <span class="text-lg leading-none">✅</span>
+        <span class="text-[10px] font-medium">習慣</span>
+    </button>
+    <button onclick="jumpSection('section-weekly')"   class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
+        <span class="text-lg leading-none">📊</span>
+        <span class="text-[10px] font-medium">週報</span>
+    </button>
+    <button onclick="jumpSection('section-calendar')" class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-gray-500 hover:text-gray-900 transition active:bg-gray-50">
+        <span class="text-lg leading-none">📆</span>
+        <span class="text-[10px] font-medium">行事曆</span>
+    </button>
+</nav>
 </body>
 </html>
