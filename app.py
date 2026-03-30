@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, jsonify, session
-from engine import load_data, save_data, calculate_pressure, load_users, save_users
+from engine import load_data, save_data, calculate_pressure, load_users, save_users, load_shared, save_shared
+import uuid as _uuid
 from datetime import datetime, timedelta
 import re, time as _time, copy
 
@@ -12,6 +13,31 @@ if app.secret_key == 'cmd-center-dev-secret-2024':
 
 def uid():
     return session.get('user_id', 'default')
+
+def new_tid():
+    return _uuid.uuid4().hex[:8]
+
+def get_sched():
+    return load_shared().get('schedule', {})
+
+def put_sched(schedule):
+    s = load_shared()
+    s['schedule'] = schedule
+    save_shared(s)
+
+def find_task(schedule, date, tid):
+    for i, t in enumerate(schedule.get(date, [])):
+        if t.get('id') == tid:
+            return i, t
+    return None, None
+
+def visible_sched(schedule, user_id):
+    out = {}
+    for date, tasks in schedule.items():
+        vs = [t for t in tasks if not t.get('private') or t.get('uid') == user_id]
+        if vs:
+            out[date] = vs
+    return out
 
 def current_user_info():
     users = load_users()
@@ -42,7 +68,10 @@ def dashboard():
         if key == "cs_grad_exam":
             days_left = ml_days
 
-    today_schedule = data["schedule"].get(current_date, [])
+    shared = load_shared()
+    current_uid_val = uid()
+    vsched = visible_sched(shared.get('schedule', {}), current_uid_val)
+    today_schedule = vsched.get(current_date, [])
 
     if pressure >= 4.0:
         alert_bg, dot_color = "bg-red-900/40 border-red-500/50 text-red-400", "bg-red-500"
@@ -131,7 +160,7 @@ def dashboard():
     week_stats = []
     for i in range(6, -1, -1):
         d = (today_obj - timedelta(days=i)).strftime('%Y-%m-%d')
-        sched  = data['schedule'].get(d, [])
+        sched  = vsched.get(d, [])
         h_done = len(data.get('habit_logs', {}).get(d, []))
         pomo   = pomodoro_logs.get(d, 0)
         week_stats.append({
@@ -163,6 +192,7 @@ def dashboard():
                            pomodoro_today=pomodoro_today, pomodoro_week=pomodoro_week,
                            week_stats=week_stats,
                            study_worst=study_worst,
+                           shared_schedule=vsched,
                            users=load_users(), current_user=current_user_info())
 
 # ── 使用者管理 ────────────────────────────────────────────────
@@ -221,30 +251,30 @@ def delete_user():
 @app.route('/api/toggle', methods=['POST'])
 def toggle_task():
     req = request.json
-    date, index = req.get('date'), req.get('index')
-    data = load_data(uid())
-    if date in data["schedule"] and index < len(data["schedule"][date]):
-        data["schedule"][date][index]["completed"] = not data["schedule"][date][index]["completed"]
-        save_data(data, uid())
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error"}), 400
+    date, tid = req.get('date'), req.get('task_id')
+    sched = get_sched()
+    idx, t = find_task(sched, date, tid)
+    if idx is None:
+        return jsonify({"status": "error"}), 400
+    t['completed'] = not t.get('completed', False)
+    put_sched(sched)
+    return jsonify({"status": "success"})
 
 @app.route('/api/edit_task', methods=['POST'])
 def edit_task():
-    req   = request.json
-    date  = req.get('date')
-    index = req.get('index')
-    data  = load_data(uid())
-    if date in data["schedule"] and 0 <= index < len(data["schedule"][date]):
-        t = data["schedule"][date][index]
-        if req.get('task'):     t['task']     = req['task']
-        if req.get('time'):     t['time']     = req['time']
-        if req.get('duration'): t['duration'] = int(req['duration'])
-        if req.get('color') is not None: t['color'] = req['color']
-        data["schedule"][date].sort(key=lambda x: x["time"])
-        save_data(data, uid())
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error"}), 400
+    req  = request.json
+    date, tid = req.get('date'), req.get('task_id')
+    sched = get_sched()
+    idx, t = find_task(sched, date, tid)
+    if idx is None:
+        return jsonify({"status": "error"}), 400
+    if req.get('task'):     t['task']     = req['task']
+    if req.get('time'):     t['time']     = req['time']
+    if req.get('duration'): t['duration'] = int(req['duration'])
+    if req.get('color') is not None: t['color'] = req['color']
+    sched[date].sort(key=lambda x: x['time'])
+    put_sched(sched)
+    return jsonify({"status": "success"})
 
 @app.route('/api/add_task', methods=['POST'])
 def add_task():
@@ -252,27 +282,42 @@ def add_task():
     date, task_name = req.get('date'), req.get('task', '').strip()
     if not date or not task_name:
         return jsonify({"status": "error"}), 400
-    data = load_data(uid())
-    data["schedule"].setdefault(date, [])
-    entry = {"time": req.get('time', '09:00'), "task": task_name,
+    sched = get_sched()
+    sched.setdefault(date, [])
+    tid = new_tid()
+    entry = {"id": tid, "uid": uid(), "private": False,
+             "time": req.get('time', '09:00'), "task": task_name,
              "duration": int(req.get('duration', 60)), "completed": False}
     if req.get('color'):
         entry["color"] = req['color']
-    data["schedule"][date].append(entry)
-    data["schedule"][date].sort(key=lambda x: x["time"])
-    save_data(data, uid())
-    return jsonify({"status": "success"})
+    sched[date].append(entry)
+    sched[date].sort(key=lambda x: x["time"])
+    put_sched(sched)
+    return jsonify({"status": "success", "id": tid})
 
 @app.route('/api/delete_task', methods=['POST'])
 def delete_task():
     req = request.json
-    date, index = req.get('date'), req.get('index')
-    data = load_data(uid())
-    if date in data["schedule"] and 0 <= index < len(data["schedule"][date]):
-        data["schedule"][date].pop(index)
-        save_data(data, uid())
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error"}), 400
+    date, tid = req.get('date'), req.get('task_id')
+    sched = get_sched()
+    idx, _ = find_task(sched, date, tid)
+    if idx is None:
+        return jsonify({"status": "error"}), 400
+    sched[date].pop(idx)
+    put_sched(sched)
+    return jsonify({"status": "success"})
+
+@app.route('/api/toggle_private', methods=['POST'])
+def toggle_private():
+    req = request.json
+    date, tid = req.get('date'), req.get('task_id')
+    sched = get_sched()
+    idx, t = find_task(sched, date, tid)
+    if idx is None or t.get('uid') != uid():
+        return jsonify({'status': 'error'}), 400
+    t['private'] = not t.get('private', False)
+    put_sched(sched)
+    return jsonify({'status': 'success', 'private': t['private']})
 
 # ── 雜記 & Inbox ─────────────────────────────────────────────
 
@@ -326,15 +371,18 @@ def inbox_to_task():
     if item_name not in data.get("inbox", []):
         return jsonify({"status": "error", "msg": "item not in inbox"}), 400
     entry = {
+        "id": new_tid(), "uid": uid(), "private": False,
         "time":      req.get('time', '09:00'),
         "task":      item_name,
         "duration":  max(5, int(req.get('duration', 60))),
         "completed": False
     }
     data["inbox"].remove(item_name)
-    data["schedule"].setdefault(date, []).append(entry)
-    data["schedule"][date].sort(key=lambda x: x["time"])
     save_data(data, uid())
+    sched = get_sched()
+    sched.setdefault(date, []).append(entry)
+    sched[date].sort(key=lambda x: x["time"])
+    put_sched(sched)
     return jsonify({"status": "success"})
 
 @app.route('/api/inbox_to_deadline', methods=['POST'])
@@ -452,13 +500,14 @@ def schedule_study():
     if not date or not subject:
         return jsonify({"status": "error"}), 400
     task_name = f"{subject} {chapter}".strip() if chapter else subject
-    data = load_data(uid())
-    data["schedule"].setdefault(date, []).append({
+    sched = get_sched()
+    sched.setdefault(date, []).append({
+        "id": new_tid(), "uid": uid(), "private": False,
         "time": req.get('time', '09:00'), "task": task_name,
         "duration": int(req.get('duration', 120)), "completed": False
     })
-    data["schedule"][date].sort(key=lambda x: x["time"])
-    save_data(data, uid())
+    sched[date].sort(key=lambda x: x["time"])
+    put_sched(sched)
     return jsonify({"status": "success"})
 
 # ── 習慣 API ──────────────────────────────────────────────────
@@ -619,16 +668,17 @@ def edit_milestone():
 
 @app.route('/api/move_task', methods=['POST'])
 def move_task():
-    req       = request.json
-    date      = req.get('date')
-    idx       = req.get('index')
-    direction = req.get('direction')
-    data  = load_data(uid())
-    tasks = data['schedule'].get(date, [])
+    req = request.json
+    date, tid, direction = req.get('date'), req.get('task_id'), req.get('direction')
+    sched = get_sched()
+    tasks = sched.get(date, [])
+    idx = next((i for i, t in enumerate(tasks) if t.get('id') == tid), None)
+    if idx is None:
+        return jsonify({'status': 'error'}), 400
     new_idx = idx + (1 if direction == 'down' else -1)
-    if 0 <= idx < len(tasks) and 0 <= new_idx < len(tasks):
+    if 0 <= new_idx < len(tasks):
         tasks[idx], tasks[new_idx] = tasks[new_idx], tasks[idx]
-        save_data(data, uid())
+        put_sched(sched)
     return jsonify({'status': 'success'})
 
 @app.route('/api/save_fixed_schedule', methods=['POST'])

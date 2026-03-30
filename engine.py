@@ -1,6 +1,7 @@
 import json
 import os
 import copy
+import uuid as _uuid
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -61,6 +62,34 @@ def load_data(user_id='default'):
 def save_data(data, user_id='default'):
     with open(_data_path(user_id), 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+# ── 共用行事曆 ───────────────────────────────────────────────
+
+SHARED_PATH = os.path.join(BASE_DIR, 'data_shared.json')
+
+def _ensure_task_ids(schedule):
+    changed = False
+    for tasks in schedule.values():
+        for t in tasks:
+            if 'id' not in t:
+                t['id'] = _uuid.uuid4().hex[:8]
+                changed = True
+    return changed
+
+def load_shared():
+    if not os.path.exists(SHARED_PATH):
+        d = load_data('default')
+        shared = {'schedule': d.get('schedule', {})}
+    else:
+        with open(SHARED_PATH, 'r', encoding='utf-8') as f:
+            shared = json.load(f)
+    if _ensure_task_ids(shared.get('schedule', {})):
+        save_shared(shared)
+    return shared
+
+def save_shared(shared):
+    with open(SHARED_PATH, 'w', encoding='utf-8') as f:
+        json.dump(shared, f, indent=2, ensure_ascii=False)
 
 # ── 壓力計算 ──────────────────────────────────────────────────
 

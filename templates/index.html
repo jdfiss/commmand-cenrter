@@ -108,9 +108,9 @@
                 <div class="divide-y divide-gray-50">
                     {% for task in today_schedule %}
                     {% set is_past = task.time < current_time and not task.completed %}
-                    <div data-swipe-task data-date="{{ current_date }}" data-idx="{{ loop.index0 }}" class="overflow-hidden">
+                    <div data-swipe-task data-date="{{ current_date }}" data-tid="{{ task.id }}" class="overflow-hidden">
                     <div class="swipe-content flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 transition group"
-                         onclick="toggleTask('{{ current_date }}', {{ loop.index0 }})">
+                         onclick="toggleTask('{{ current_date }}', '{{ task.id }}')">
                         <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition
                             {% if task.completed %}bg-emerald-500 border-emerald-500
                             {% elif is_past %}border-orange-400
@@ -126,9 +126,14 @@
                             {% if is_past and not task.completed %}<span class="text-[10px] text-orange-400 font-semibold">遲了</span>{% endif %}
                             <span class="text-xs font-mono text-gray-400">{{ task.time }}</span>
                             <span class="text-[10px] text-gray-300">{{ task.duration }}m</span>
-                            <button onclick="event.stopPropagation(); moveTask('{{ current_date }}', {{ loop.index0 }}, 'up')"
+                            {% if task.uid == current_user.id or not task.uid %}
+                            <span class="text-[10px] text-gray-300 shrink-0" title="{{ '僅自己' if task.private else '共用' }}">{{ '🔒' if task.private else '' }}</span>
+                            {% else %}
+                            <span class="text-[10px] text-blue-300 shrink-0" title="其他人的事項">👤</span>
+                            {% endif %}
+                            <button onclick="event.stopPropagation(); moveTask('{{ current_date }}', '{{ task.id }}', 'up')"
                                 class="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-gray-300 hover:text-gray-600 transition rounded hover:bg-gray-100 text-[10px]">↑</button>
-                            <button onclick="event.stopPropagation(); moveTask('{{ current_date }}', {{ loop.index0 }}, 'down')"
+                            <button onclick="event.stopPropagation(); moveTask('{{ current_date }}', '{{ task.id }}', 'down')"
                                 class="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-gray-300 hover:text-gray-600 transition rounded hover:bg-gray-100 text-[10px]">↓</button>
                             <button onclick="event.stopPropagation(); startFocusTimer('{{ task.task }}')"
                                 class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-700 transition rounded-md hover:bg-gray-100">
@@ -796,7 +801,8 @@
     }
 
     // ── 全域資料 ─────────────────────────────────────────────────
-    const SCHEDULE_DATA    = {{ data.schedule | tojson }};
+    const SCHEDULE_DATA    = {{ shared_schedule | tojson }};
+    const CURRENT_UID      = '{{ current_user.id }}';
     const DEADLINES_CAL    = {{ deadlines | tojson }};
     const DEADLINES_SERVER = {{ data.deadlines | tojson }};
     const FIXED_SCHEDULE   = {{ fixed_schedule | tojson }};
@@ -892,8 +898,8 @@
     }
 
     // ── 任務操作 ─────────────────────────────────────────────────
-    async function toggleTask(date, index) {
-        const res = await apiFetch('/api/toggle', { date, index });
+    async function toggleTask(date, tid) {
+        const res = await apiFetch('/api/toggle', { date, task_id: tid });
         if (!res) return;
         window.location.reload();
     }
@@ -1332,34 +1338,39 @@
         }
         const sec = document.createElement('div');
         sec.innerHTML = '<p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 px-1">行程</p>';
-        tasks.forEach((t, idx) => {
+        tasks.forEach((t) => {
+            const tid = t.id;
+            const isOwner = !t.uid || t.uid === CURRENT_UID;
             const barColor = getBarColor(t.task, t.color);
             const item = document.createElement('div');
             item.className = `group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border mb-1.5 transition cursor-pointer
                 ${t.completed ? 'opacity-50 border-gray-100 bg-gray-50' : 'border-gray-100 bg-white hover:bg-gray-50'}`;
             item.innerHTML = `
                 <div class="w-1 h-8 rounded-full shrink-0 ${t.completed ? 'bg-gray-200' : barColor}"></div>
-                <div class="flex-1 min-w-0" onclick="toggleTaskFromCal('${dateStr}', ${idx})">
+                <div class="flex-1 min-w-0" onclick="toggleTaskFromCal('${dateStr}', '${tid}')">
                     <div class="text-sm font-medium leading-tight ${t.completed ? 'line-through text-gray-400' : 'text-gray-800'} truncate">${t.task}</div>
-                    <div class="text-[11px] text-gray-400 mt-0.5">${t.time} · ${t.duration}min</div>
+                    <div class="text-[11px] text-gray-400 mt-0.5">${t.time} · ${t.duration}min${t.private ? ' · 🔒 僅自己' : (t.uid && t.uid !== CURRENT_UID ? ' · 👤' : '')}</div>
                 </div>
-                <button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-400 transition shrink-0"
-                    onclick="event.stopPropagation(); openEditTaskModal('${dateStr}', ${idx})">
+                ${isOwner ? `<button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition shrink-0 text-sm"
+                    onclick="event.stopPropagation(); togglePrivateTask('${dateStr}', '${tid}', this)" title="${t.private ? '設為共用' : '設為僅自己'}">${t.private ? '🔒' : '🔓'}</button>` : ''}
+                ${isOwner ? `<button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-400 transition shrink-0"
+                    onclick="event.stopPropagation(); openEditTaskModal('${dateStr}', '${tid}')">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                </button>
-                <button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-400 transition shrink-0"
-                    onclick="deleteTaskFromCal('${dateStr}', ${idx})">
+                </button>` : ''}
+                ${isOwner ? `<button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-400 transition shrink-0"
+                    onclick="deleteTaskFromCal('${dateStr}', '${tid}')">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>`;
+                </button>` : ''}`;
             sec.appendChild(item);
         });
         container.appendChild(sec);
     }
 
-    async function toggleTaskFromCal(dateStr, idx) {
-        await fetch('/api/toggle', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, index: idx }) });
+    async function toggleTaskFromCal(dateStr, tid) {
+        await fetch('/api/toggle', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, task_id: tid }) });
         const tasks = SCHEDULE_DATA[dateStr];
-        if (tasks && tasks[idx]) tasks[idx].completed = !tasks[idx].completed;
+        const t = tasks && tasks.find(x => x.id === tid);
+        if (t) t.completed = !t.completed;
         renderCalendar();
         if (dateStr === TODAY) {
             window.location.reload();
@@ -1368,12 +1379,24 @@
             setTimeout(() => closeDayPanel(), 400);
         }
     }
-    async function deleteTaskFromCal(dateStr, idx) {
-        if (!confirm(`刪除「${SCHEDULE_DATA[dateStr][idx].task}」？`)) return;
-        await fetch('/api/delete_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, index: idx }) });
-        SCHEDULE_DATA[dateStr].splice(idx, 1);
+    async function deleteTaskFromCal(dateStr, tid) {
+        const tasks = SCHEDULE_DATA[dateStr] || [];
+        const t = tasks.find(x => x.id === tid);
+        if (!confirm(`刪除「${t ? t.task : '此事項'}」？`)) return;
+        await fetch('/api/delete_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, task_id: tid }) });
+        if (SCHEDULE_DATA[dateStr]) SCHEDULE_DATA[dateStr] = SCHEDULE_DATA[dateStr].filter(x => x.id !== tid);
         renderCalendar(); renderPanelTasks(dateStr);
         if (dateStr === TODAY) window.location.reload();
+    }
+    async function togglePrivateTask(dateStr, tid, btn) {
+        const res = await fetch('/api/toggle_private', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: dateStr, task_id: tid }) });
+        const data = await res.json();
+        if (data.status !== 'success') return;
+        const t = (SCHEDULE_DATA[dateStr] || []).find(x => x.id === tid);
+        if (t) t.private = data.private;
+        btn.textContent = data.private ? '🔒' : '🔓';
+        btn.title = data.private ? '設為共用' : '設為僅自己';
+        renderPanelTasks(dateStr);
     }
     async function addTaskFromCal() {
         const nameEl = document.getElementById('new-task-name');
@@ -1384,16 +1407,16 @@
         if (!isAllDay) {
             time = document.getElementById('new-task-time').value || '09:00';
             const endTime = document.getElementById('new-task-end-time').value || '10:00';
-            // Compute duration in minutes from time range
             const [sh, sm] = time.split(':').map(Number);
             const [eh, em] = endTime.split(':').map(Number);
             dur = Math.max(5, (eh * 60 + em) - (sh * 60 + sm));
             if (dur <= 0) dur = 60;
         }
         const color = selectedColor;
-        await fetch('/api/add_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: selectedDate, task: taskName, time, duration: dur, color }) });
+        const res = await fetch('/api/add_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: selectedDate, task: taskName, time, duration: dur, color }) });
+        const data = await res.json();
         if (!SCHEDULE_DATA[selectedDate]) SCHEDULE_DATA[selectedDate] = [];
-        SCHEDULE_DATA[selectedDate].push({ time, task: taskName, duration: dur, completed: false, color });
+        SCHEDULE_DATA[selectedDate].push({ id: data.id, uid: CURRENT_UID, private: false, time, task: taskName, duration: dur, completed: false, color });
         SCHEDULE_DATA[selectedDate].sort((a, b) => a.time.localeCompare(b.time));
         nameEl.value = '';
         document.getElementById('task-all-day').checked = false;
@@ -1514,17 +1537,17 @@
     // ── Apply swipes ─────────────────────────────────────────────
     function initTodaySwipes() {
         document.querySelectorAll('[data-swipe-task]').forEach(wrap => {
-            const date = wrap.dataset.date, idx = parseInt(wrap.dataset.idx);
+            const date = wrap.dataset.date, tid = wrap.dataset.tid;
             const cEl = wrap.querySelector('.swipe-content');
             if (!cEl) return;
             initSwipe(cEl, [
-                { label:'編輯', bg:'#6366f1', fn: () => openEditTaskModal(date, idx) },
-                { label:'刪除', bg:'#ef4444', fn: () => { if(confirm('刪除此任務？')) deleteTaskDirect(date, idx); } }
+                { label:'編輯', bg:'#6366f1', fn: () => openEditTaskModal(date, tid) },
+                { label:'刪除', bg:'#ef4444', fn: () => { if(confirm('刪除此任務？')) deleteTaskDirect(date, tid); } }
             ]);
         });
     }
-    async function deleteTaskDirect(date, idx) {
-        const res = await apiFetch('/api/delete_task', { date, index: idx });
+    async function deleteTaskDirect(date, tid) {
+        const res = await apiFetch('/api/delete_task', { date, task_id: tid });
         if (!res) return;
         window.location.reload();
     }
@@ -1641,10 +1664,11 @@
     }
 
     // ── Edit modals ──────────────────────────────────────────────
-    let _editDate = null, _editIdx = null;
-    function openEditTaskModal(date, idx) {
-        _editDate = date; _editIdx = idx;
-        const t = SCHEDULE_DATA[date]?.[idx];
+    let _editDate = null, _editTid = null;
+    function openEditTaskModal(date, tid) {
+        _editDate = date; _editTid = tid;
+        const tasks = SCHEDULE_DATA[date] || [];
+        const t = tasks.find(x => x.id === tid);
         if (!t) return;
         document.getElementById('edit-task-name').value = t.task;
         document.getElementById('edit-task-time').value = t.time;
@@ -1653,7 +1677,7 @@
     }
     async function saveEditTask() {
         const res = await apiFetch('/api/edit_task', {
-            date: _editDate, index: _editIdx,
+            date: _editDate, task_id: _editTid,
             task:     document.getElementById('edit-task-name').value.trim(),
             time:     document.getElementById('edit-task-time').value,
             duration: document.getElementById('edit-task-dur').value
@@ -1697,9 +1721,9 @@
     }
 
     // ── 任務上下移 ────────────────────────────────────────────────
-    async function moveTask(date, idx, direction) {
+    async function moveTask(date, tid, direction) {
         await fetch('/api/move_task', { method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ date, index: idx, direction }) });
+            body: JSON.stringify({ date, task_id: tid, direction }) });
         window.location.reload();
     }
 

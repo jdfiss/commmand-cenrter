@@ -4,5 +4,7 @@ __pycache__/
 .env
 *.log
 data.json
+data_*.json
 users.json
+data_shared.json
 deploy.py
