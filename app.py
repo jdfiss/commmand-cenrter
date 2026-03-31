@@ -272,6 +272,7 @@ def edit_task():
     if req.get('time'):     t['time']     = req['time']
     if req.get('duration'): t['duration'] = int(req['duration'])
     if req.get('color') is not None: t['color'] = req['color']
+    if 'note' in req:       t['note']     = req['note']
     sched[date].sort(key=lambda x: x['time'])
     put_sched(sched)
     return jsonify({"status": "success"})
@@ -288,8 +289,8 @@ def add_task():
     entry = {"id": tid, "uid": uid(), "private": False,
              "time": req.get('time', '09:00'), "task": task_name,
              "duration": int(req.get('duration', 60)), "completed": False}
-    if req.get('color'):
-        entry["color"] = req['color']
+    if req.get('color'):  entry["color"] = req['color']
+    if req.get('note'):   entry["note"]  = req['note']
     sched[date].append(entry)
     sched[date].sort(key=lambda x: x["time"])
     put_sched(sched)
@@ -455,7 +456,8 @@ def update_study():
     data = load_data(uid())
     if subject in data.get("study_plan", {}):
         prog = data["study_plan"][subject]
-        prog["finished"] = max(0, min(prog["finished"] + delta, prog["total"]))
+        cap = prog["total"] if prog["total"] > 0 else 9999
+        prog["finished"] = max(0, min(prog["finished"] + delta, cap))
         save_data(data, uid())
         return jsonify({"status": "success", "finished": prog["finished"]})
     return jsonify({"status": "error"}), 400
@@ -473,11 +475,14 @@ def delete_subject():
 @app.route('/api/add_subject', methods=['POST'])
 def add_subject():
     req = request.json
-    name, total = req.get('name', '').strip(), int(req.get('total', 10))
+    name  = req.get('name', '').strip()
+    total = int(req.get('total', 0)) if req.get('total') not in (None, '', '0') else 0
     if not name:
         return jsonify({"status": "error"}), 400
     data = load_data(uid())
-    data.setdefault("study_plan", {})[name] = {"finished": 0, "total": total}
+    entry = {"finished": 0, "total": total}
+    if req.get('deadline'): entry["deadline"] = req['deadline']
+    data.setdefault("study_plan", {})[name] = entry
     save_data(data, uid())
     return jsonify({"status": "success"})
 
@@ -554,6 +559,17 @@ def rename_habit():
             day[day.index(old)] = new
     save_data(data, uid())
     return jsonify({'status': 'success'})
+
+@app.route('/api/set_study_deadline', methods=['POST'])
+def set_study_deadline():
+    req = request.json
+    subject, deadline = req.get('subject'), req.get('deadline', '')
+    data = load_data(uid())
+    if subject in data.get('study_plan', {}):
+        data['study_plan'][subject]['deadline'] = deadline
+        save_data(data, uid())
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
 
 @app.route('/api/edit_study_total', methods=['POST'])
 def edit_study_total():

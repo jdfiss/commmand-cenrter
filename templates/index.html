@@ -173,6 +173,8 @@
                         <input id="new-task-end-time" type="time" value="10:00" class="flex-1 bg-white border border-gray-200 rounded-xl px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
                     </div>
                     <div id="task-color-picker" class="flex gap-2 mb-2 flex-wrap"></div>
+                    <input id="new-task-note" type="text" placeholder="備註（選填）"
+                        class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2 transition placeholder:text-gray-400"/>
                     <button onclick="addTaskFromCal()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition active:scale-95">加入排程</button>
                 </div>
             </div>
@@ -391,12 +393,19 @@
             <button onclick="toggleAddSubject()" class="text-xs font-medium text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition active:scale-95">＋ 新增科目</button>
         </div>
         <div id="add-subject-form" class="hidden px-5 py-4 bg-gray-50 border-b border-gray-100">
-            <div class="flex gap-2">
+            <div class="flex gap-2 mb-2">
                 <input id="new-subject-name" type="text" placeholder="科目名稱"
                     class="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
-                <input id="new-subject-total" type="number" placeholder="章數" value="10" min="1"
-                    class="w-20 bg-white border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
-                <button onclick="addSubject()" class="px-3 py-2 bg-gray-900 text-white text-sm rounded-lg font-semibold transition active:scale-95">新增</button>
+                <input id="new-subject-total" type="number" placeholder="章數（選填）" min="0"
+                    class="w-28 bg-white border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+            </div>
+            <div class="flex gap-2">
+                <div class="flex-1 flex items-center gap-1.5">
+                    <span class="text-xs text-gray-400 shrink-0">到期</span>
+                    <input id="new-subject-deadline" type="date"
+                        class="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-800 focus:outline-none focus:border-gray-400 transition"/>
+                </div>
+                <button onclick="addSubject()" class="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg font-semibold transition active:scale-95">新增</button>
             </div>
         </div>
         <div class="divide-y divide-gray-50">
@@ -404,13 +413,19 @@
             <div data-swipe-study data-subject="{{ subject }}" class="overflow-hidden">
             <div class="swipe-content px-5 py-4 hover:bg-gray-50 transition">
                 <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex items-center gap-1.5 flex-wrap">
                         <button onclick="openSubjectModal('{{ subject }}')" class="text-sm font-semibold text-gray-900 hover:text-gray-500 transition text-left">{{ subject }}</button>
                         {% if subject == study_worst %}<span class="text-xs bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded font-semibold">🔥 優先</span>{% endif %}
-                        <button onclick="toggleStudyNote('{{ subject }}')"
-                            class="text-[10px] text-gray-400 hover:text-violet-600 border border-gray-200 hover:border-violet-300 px-1.5 py-0.5 rounded transition"
-                            title="備註細項">備註</button>
+                        {% if prog.deadline %}
+                        <button onclick="editStudyDeadline('{{ subject }}', '{{ prog.deadline }}')"
+                            class="text-[10px] {% if prog.deadline <= current_date %}text-red-500 border-red-200 bg-red-50{% else %}text-sky-600 border-sky-200 bg-sky-50{% endif %} border px-1.5 py-0.5 rounded font-medium transition hover:opacity-70">
+                            📅 {{ prog.deadline }}</button>
+                        {% else %}
+                        <button onclick="editStudyDeadline('{{ subject }}', '')"
+                            class="text-[10px] text-gray-400 hover:text-sky-600 border border-dashed border-gray-300 hover:border-sky-300 px-1.5 py-0.5 rounded transition">＋到期日</button>
+                        {% endif %}
                     </div>
+                    {% if prog.total > 0 %}
                     <div class="flex items-center gap-1.5">
                         <button onclick="updateChapter('{{ subject }}', -1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-500 text-xs font-bold transition active:scale-90">−</button>
                         <span class="text-xs font-mono text-gray-700 w-14 text-center bg-gray-100 rounded px-1.5 py-0.5 flex gap-0.5 items-center justify-center">
@@ -420,7 +435,9 @@
                         </span>
                         <button onclick="updateChapter('{{ subject }}', 1)" class="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-emerald-100 hover:text-emerald-600 text-gray-500 text-xs font-bold transition active:scale-90">＋</button>
                     </div>
+                    {% endif %}
                 </div>
+                {% if prog.total > 0 %}
                 <div class="w-full bg-gray-100 rounded-full h-1.5">
                     <div class="h-1.5 rounded-full bg-gray-900 transition-all duration-700" style="width:{{ prog.pct }}%"></div>
                 </div>
@@ -428,6 +445,7 @@
                     <span>{{ prog.pct }}% 完成 · 剩 {{ prog.total - prog.finished }} 章</span>
                     <span>{{ prog.est_finish }}</span>
                 </div>
+                {% endif %}
                 <!-- 備註細項 (hidden by default) -->
                 <div class="hidden mt-3 pt-3 border-t border-gray-100" data-study-note="{{ loop.index0 }}">
                     <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">細項備註</p>
@@ -592,10 +610,11 @@
             <button onclick="document.getElementById('edit-task-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
         </div>
         <input id="edit-task-name" type="text" placeholder="任務名稱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-2"/>
-        <div class="flex gap-2 mb-4">
+        <div class="flex gap-2 mb-2">
             <input id="edit-task-time" type="time" class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
             <input id="edit-task-dur" type="number" min="5" placeholder="分鐘" class="w-24 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400"/>
         </div>
+        <input id="edit-task-note" type="text" placeholder="備註（選填）" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-gray-400 mb-4"/>
         <button onclick="saveEditTask()" class="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-semibold transition active:scale-95">儲存</button>
     </div>
 </div>
@@ -781,6 +800,7 @@
     const TODAY            = "{{ current_date }}";
 
     // ── Inbox ────────────────────────────────────────────────────
+    let _inboxSwipesInited = false;
     function toggleInboxList(forceOpen) {
         const list = document.getElementById('inbox-list');
         const icon = document.getElementById('inbox-toggle-icon');
@@ -790,6 +810,10 @@
         list.classList.toggle('hidden', !shouldOpen);
         if (icon) icon.style.transform = shouldOpen ? 'rotate(180deg)' : '';
         localStorage.setItem('inbox_open', shouldOpen ? '1' : '0');
+        if (shouldOpen && !_inboxSwipesInited) {
+            _inboxSwipesInited = true;
+            setTimeout(() => initInboxSwipes(), 0);
+        }
     }
 
     async function addToInbox() {
@@ -897,11 +921,19 @@
         document.getElementById('new-subject-name').focus();
     }
     async function addSubject() {
-        const name  = document.getElementById('new-subject-name').value.trim();
-        const total = parseInt(document.getElementById('new-subject-total').value) || 10;
+        const name     = document.getElementById('new-subject-name').value.trim();
+        const totalRaw = document.getElementById('new-subject-total').value.trim();
+        const total    = totalRaw ? (parseInt(totalRaw) || 0) : 0;
+        const deadline = document.getElementById('new-subject-deadline').value;
         if (!name) return;
-        const res = await apiFetch('/api/add_subject', { name, total });
+        const res = await apiFetch('/api/add_subject', { name, total, deadline });
         if (!res) return;
+        window.location.reload();
+    }
+    async function editStudyDeadline(subject, current) {
+        const val = prompt(`「${subject}」到期日 (YYYY-MM-DD)，留空清除：`, current || '');
+        if (val === null) return;
+        await apiFetch('/api/set_study_deadline', { subject, deadline: val.trim() });
         window.location.reload();
     }
 
@@ -1331,7 +1363,7 @@
                 <div class="w-1 h-8 rounded-full shrink-0 ${t.completed ? 'bg-gray-200' : barColor}"></div>
                 <div class="flex-1 min-w-0" onclick="toggleTaskFromCal('${dateStr}', '${tid}')">
                     <div class="text-sm font-medium leading-tight ${t.completed ? 'line-through text-gray-400' : 'text-gray-800'} truncate">${t.task}</div>
-                    <div class="text-[11px] text-gray-400 mt-0.5">${t.time} · ${t.duration}min${t.private ? ' · 🔒 僅自己' : (t.uid && t.uid !== CURRENT_UID ? ' · 👤' : '')}</div>
+                    <div class="text-[11px] text-gray-400 mt-0.5">${t.time} · ${t.duration}min${t.private ? ' · 🔒 僅自己' : (t.uid && t.uid !== CURRENT_UID ? ' · 👤' : '')}${t.note ? ' · ' + t.note : ''}</div>
                 </div>
                 ${isOwner ? `<button class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition shrink-0 text-sm"
                     onclick="event.stopPropagation(); togglePrivateTask('${dateStr}', '${tid}', this)" title="${t.private ? '設為共用' : '設為僅自己'}">${t.private ? '🔒' : '🔓'}</button>` : ''}
@@ -1395,17 +1427,20 @@
             if (dur <= 0) dur = 60;
         }
         const color = selectedColor;
-        const res = await fetch('/api/add_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: selectedDate, task: taskName, time, duration: dur, color }) });
+        const note = document.getElementById('new-task-note').value.trim();
+        const res = await fetch('/api/add_task', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date: selectedDate, task: taskName, time, duration: dur, color, note }) });
         const data = await res.json();
         if (!SCHEDULE_DATA[selectedDate]) SCHEDULE_DATA[selectedDate] = [];
-        SCHEDULE_DATA[selectedDate].push({ id: data.id, uid: CURRENT_UID, private: false, time, task: taskName, duration: dur, completed: false, color });
+        SCHEDULE_DATA[selectedDate].push({ id: data.id, uid: CURRENT_UID, private: false, time, task: taskName, duration: dur, completed: false, color, note });
         SCHEDULE_DATA[selectedDate].sort((a, b) => a.time.localeCompare(b.time));
         nameEl.value = '';
+        document.getElementById('new-task-note').value = '';
         document.getElementById('task-all-day').checked = false;
         toggleAllDayInput();
         selectedColor = 'indigo'; renderColorPicker();
-        renderCalendar(); renderPanelTasks(selectedDate);
-        if (selectedDate === TODAY) window.location.reload();
+        if (selectedDate === TODAY) { window.location.reload(); return; }
+        renderCalendar();
+        closeDayPanel();
     }
 
     // ── Weekly strip (in calendar header) ────────────────────────
@@ -1655,6 +1690,7 @@
         document.getElementById('edit-task-name').value = t.task;
         document.getElementById('edit-task-time').value = t.time;
         document.getElementById('edit-task-dur').value  = t.duration;
+        document.getElementById('edit-task-note').value = t.note || '';
         document.getElementById('edit-task-modal').classList.remove('hidden');
     }
     async function saveEditTask() {
@@ -1662,7 +1698,8 @@
             date: _editDate, task_id: _editTid,
             task:     document.getElementById('edit-task-name').value.trim(),
             time:     document.getElementById('edit-task-time').value,
-            duration: document.getElementById('edit-task-dur').value
+            duration: document.getElementById('edit-task-dur').value,
+            note:     document.getElementById('edit-task-note').value.trim()
         });
         if (!res) return;
         document.getElementById('edit-task-modal').classList.add('hidden');
@@ -2060,7 +2097,6 @@
         renderColorPicker();
         renderHabitHeatmap();
         initTodaySwipes();
-        initInboxSwipes();
         initDeadlineSwipes();
         initDebtSwipes();
         initStudySwipes();
